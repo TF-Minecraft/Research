@@ -1,7 +1,7 @@
 main: net.tfminecraft.research.Research
-api-version: '1.19'
+api-version: '1.21.10'
 name: Research
-version: 0.13.0
+version: '${project.version}'
 author: Drefvelin
 depend: [MMOItems, MythicLib, ItemsAdder, TLibs, TFMCCore]
 softdepend: [MMOCore]

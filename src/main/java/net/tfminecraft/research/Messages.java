@@ -3,7 +3,7 @@ package net.tfminecraft.research;
 import java.util.HashMap;
 import java.util.Map;
 
-import me.Plugins.TLibs.Objects.API.SubAPI.StringFormatter;
+import net.tfminecraft.tlibs.objects.api.subapi.StringFormatter;
 
 public final class Messages {
 

@@ -36,7 +36,7 @@ public final class GuiCache {
     public static String scrapConfirmYesLabel = "#82d461Confirm Scrap";
     public static String scrapConfirmNoLabel = "#c45749Cancel";
 
-    /** Hex colour tokens for GUI display names/lore (applied in batch 16). */
+    /** Hex colour tokens for GUI display names/lore. */
     public static Map<String, String> colors = Collections.emptyMap();
 
     public static void resetColors(Map<String, String> loaded) {
