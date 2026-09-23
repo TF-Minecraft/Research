@@ -37,7 +37,7 @@ public final class ResearchCompleteEvent extends Event {
     }
 
     /**
-     * @deprecated Use {@link #getOutputId()} for batch 18+ output-centric model.
+     * @deprecated Use {@link #getOutputId()} for the output-centric model.
      */
     @Deprecated
     public String getProjectId() {

@@ -6,7 +6,7 @@ import java.util.Map;
 
 import org.bukkit.ChatColor;
 
-import me.Plugins.TLibs.Objects.API.SubAPI.StringFormatter;
+import net.tfminecraft.tlibs.objects.api.subapi.StringFormatter;
 import net.tfminecraft.research.GuiCache;
 import net.tfminecraft.research.Messages;
 

@@ -7,7 +7,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import me.Plugins.TLibs.TLibs;
+import net.tfminecraft.tlibs.TLibs;
 
 /**
  * Item references in yaml use vanilla.MATERIAL, m.TYPE.ID, or ia.namespace:id.

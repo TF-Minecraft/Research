@@ -12,7 +12,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
-import me.Plugins.TLibs.Interface.LoaderInterface;
+import net.tfminecraft.tlibs.interfaces.LoaderInterface;
 import net.tfminecraft.research.Research;
 import net.tfminecraft.research.model.AspectRequirement;
 import net.tfminecraft.research.model.OutputDef;

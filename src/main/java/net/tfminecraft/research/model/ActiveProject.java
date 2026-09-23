@@ -54,7 +54,7 @@ public final class ActiveProject {
     }
 
     /**
-     * @deprecated Use {@link #getResolvedOutputId()} for batch 18+ output-centric model.
+     * @deprecated Use {@link #getResolvedOutputId()} for the output-centric model.
      */
     @Deprecated
     public String getProjectId() {

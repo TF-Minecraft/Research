@@ -88,7 +88,7 @@ public final class StationSaveData {
     }
 
     /**
-     * @deprecated Legacy field from project-centric saves; not read on load in batch 18+.
+     * @deprecated Legacy field from project-centric saves; not read on load.
      */
     @Deprecated
     public String getProjectId() {
@@ -96,7 +96,7 @@ public final class StationSaveData {
     }
 
     /**
-     * @deprecated Legacy field from project-centric saves; not written in batch 18+.
+     * @deprecated Legacy field from project-centric saves; not written.
      */
     @Deprecated
     public void setProjectId(String projectId) {
