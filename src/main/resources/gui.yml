@@ -1,0 +1,41 @@
+# GUI configuration for the research station.
+# Layout (slot numbers) is in plugin code (GridLayout). This file controls icons, labels, and GUI hex colours.
+# Chat messages remain in messages.yml (hex codes there are formatted via TLibs StringFormatter.formatHex).
+
+items:
+  confirm_button: ia.mcicons:icon_confirm
+  cancel_button: ia.mcicons:icon_cancel
+  filler: vanilla.GRAY_STAINED_GLASS_PANE
+  grid_filler: vanilla.GRAY_STAINED_GLASS_PANE
+  left_filler: vanilla.BLACK_STAINED_GLASS_PANE
+  aspect_progress_inactive: vanilla.GRAY_STAINED_GLASS_PANE
+  mental_points_icon: vanilla.LIGHT
+  locked_aspect: m.icons.RESEARCH_UNKNOWN_ICON
+  aspect_row_divider: m.icons.BLANK
+  aspect_tested_unknown: m.icons.RESEARCH_UNKNOWN_ICON
+  aspect_progress_unknown: vanilla.YELLOW_STAINED_GLASS_PANE
+  aspect_progress_revealed: vanilla.LIME_STAINED_GLASS_PANE
+  wave_pulse_default: vanilla.LIGHT_BLUE_STAINED_GLASS_PANE
+
+labels:
+  inventory_title: "Research Station"
+  scrap_confirm_title: "Confirm Scrap"
+  undiscovered_aspect_name: "§8Undiscovered Aspect"
+  undiscovered_aspect_lore:
+    - "#7a706aThis aspect has not been identified yet."
+  scrap_button: "#c45749Scrap"
+  confirm_experiment: "#82d461Confirm Experiment"
+  experiment_completed: "#575150Completed"
+  scrap_confirm_yes: "#82d461Confirm Scrap"
+  scrap_confirm_no: "#c45749Cancel"
+
+# Applied via TLibs StringFormatter.formatHex to GUI item names/lore.
+colors:
+  label_muted: "#7a706a"
+  label_body: "#d4c9ae"
+  label_accent: "#b8ae61"
+  inventory_title: "#d4c9ae"
+  aspect_confirmed: "#82d461"
+  aspect_hidden: "#575150"
+  progress_unknown: "#9c9775"
+  mental_points: "#d1b43f"

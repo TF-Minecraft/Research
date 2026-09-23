@@ -1,0 +1,49 @@
+# Player-facing strings for Research.
+# Use - not em dash (U+2014) in all messages.
+# Colours: TLibs StringFormatter.formatHex (#RRGGBB and & codes).
+
+prefix: "#d1b43fResearch #7a706a- "
+
+mental_points:
+  exhausted: "#c45749You are too exhausted to research right now."
+  display: "#7a706aMental Points: #d1b43f{amount}"
+
+station:
+  in_use: "#c45749This station is in use by someone else."
+  started: "#b8ae61Started research project."
+  hold_start_item: "#c45749Hold a research paper in your hand to use this station."
+  invalid_start_item: "#c45749That item cannot start a research project."
+  missing_start_item: "#c45749You need that research paper in your hand to start."
+  scrapped: "#c45749Research project scrapped."
+  broken: "#c45749Research at this lectern was destroyed."
+  scrap_warning: "#c45749WARNING! #ff5555The project will not be refunded!"
+  completed: "#ff55ffResearch completed!"
+
+experiment:
+  confirmed: "#82d461Aspect confirmed: #b8ae61{aspect}"
+  item_already_tested: "#7a706aYou have already tested this item for this project."
+  unknown_item: "#c45749That item cannot be used in experiments."
+  preview_points: "#7a706a+{points} points"
+  only_rejected: "#c45749This experiment only contains rejected aspects."
+
+aspect:
+  status_testing: "#7a706aStatus: #b8ae61Testing"
+  status_confirmed: "#7a706aStatus: #82d461Confirmed"
+  status_rejected: "#7a706aStatus: #575150Rejected"
+  points_progress: "#7a706aPoints: #b8ae61{current} / #d1b43f{required}"
+
+product:
+  revealed: "#b8ae61You have identified the research product."
+
+result:
+  granted: "#82d461You received #b8ae61{item}#82d461."
+  entity_name: "#ffffff{amount}x {item}"
+
+reload:
+  success: "#82d461Research configuration reloaded."
+  failed: "#c45749Research reload failed. Check console for errors."
+
+command:
+  no_permission: "#c45749No permission."
+  usage: "#b8ae61/research reload"
+  unknown_subcommand: "#c45749Unknown subcommand. Use #b8ae61/research reload"

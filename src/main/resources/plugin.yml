@@ -1,0 +1,18 @@
+main: net.tfminecraft.research.Research
+api-version: '1.19'
+name: Research
+version: 0.13.0
+author: Drefvelin
+depend: [MMOItems, MythicLib, ItemsAdder, TLibs, TFMCCore]
+softdepend: [MMOCore]
+
+commands:
+  research:
+    description: Research admin commands
+    usage: /research reload
+    permission: research.admin
+
+permissions:
+  research.admin:
+    description: Allows Research reload and admin commands
+    default: op

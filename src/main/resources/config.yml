@@ -1,0 +1,80 @@
+# Research core configuration
+# Attribute IDs and scaling are configurable here - do not hardcode in plugin code.
+
+station:
+  block: LECTERN
+  # Permission required to use a station (optional, leave empty to allow all)
+  permission: ""
+  # Played when a new research project starts at this lectern.
+  start_effects:
+    # String sound key: minecraft path (entity.player.levelup) or custom namespace:id
+    sound: entity.player.levelup
+    sound_volume: 0.8
+    sound_pitch: 1.1
+    particle: HAPPY_VILLAGER
+    particle_count: 30
+    particle_radius: 0.8
+  # Played when a research project is completed at this lectern.
+  complete_effects:
+    sound: ui.toast.challenge_complete
+    sound_volume: 1.0
+    sound_pitch: 1.15
+    extra_sound: entity.firework_rocket.twinkle
+    extra_sound_volume: 0.9
+    extra_sound_pitch: 1.3
+    extra_sound_delay_ticks: 8
+    particle: TOTEM_OF_UNDYING
+    particle_count: 50
+    particle_radius: 1.0
+    extra_particle: FIREWORK
+    extra_particle_count: 30
+    extra_particle_radius: 0.9
+  # Result item pops above the lectern on completion (not added to inventory).
+  result_spawn:
+    kick_velocity_min: 0.35
+    kick_velocity_max: 0.75
+    kick_horizontal_min: 0.05
+    kick_horizontal_max: 0.12
+    trail_ticks: 140
+    trail_interval_ticks: 2
+    burst_particles: true
+
+mental_points:
+  experiment_cost: 1
+
+# Pool cap/regen live in TFMCCore focus.yml (character-keyed).
+
+# MMOCore attribute scaling for discovery.
+# mmocore_id must match the attribute id in MMOCore config.
+attributes:
+  discovery:
+    mmocore_id: intelligence
+    product_reveal_bonus_per_point: 0.05
+    caps:
+      product_reveal_bonus: 0.5
+
+# Aspect row appears as Undiscovered Aspect + bar at this fraction of required_points.
+# Intelligence (discovery attribute) lowers the threshold via reveal_percent_reduction_per_point.
+aspect_discovery:
+  base_reveal_percent: 0.2
+  reveal_percent_reduction_per_point: 0.01
+  min_reveal_percent: 0.1
+
+# Real element identity and CONFIRMED: fraction of required_points (not progress panes).
+aspect_confirm:
+  base_confirm_percent: 0.8
+  confirm_percent_reduction_per_point: 0.01
+  min_confirm_percent: 0.3
+
+experiment:
+  primary_points: 2
+  secondary_points: 1
+  # Off-recipe aspect points before that aspect is Rejected for this project.
+  reject_points: 6
+
+# external_modifiers:
+#   experiment:
+#     aspect_point_bonus_percent: 0.1
+external_modifiers: {}
+
+# GUI icons and colours: see gui.yml

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>net.tfminecraft</groupId>
+    <artifactId>research</artifactId>
+    <version>1.0.0</version>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/gson-2.10.1.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOCore</artifactId>
+            <version>1.11.3</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/MMOCore-1.11.3.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MMOItems</artifactId>
+            <version>6.10</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/MMOItems-6.10.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>MythicLib</artifactId>
+            <version>1.6.1</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/MythicLib-1.7.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.21.8</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/spigot-api.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>TLibs</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/TFMC/TLibs/TLibs.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>TFMCCore</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/TFMC/TFMCCore/TFMCCore.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>local</groupId>
+            <artifactId>LoneLibs</artifactId>
+            <version>3.5.0</version>
+            <scope>system</scope>
+            <systemPath>D:/Dokumenter/My Plugins/Reference Libs/ItemsAdder_3.5.0-r2.jar</systemPath>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                                    tofile="D:\Dokumenter\My Plugins\TFMC\Research\${project.build.finalName}.jar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
