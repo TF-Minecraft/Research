@@ -32,16 +32,6 @@ Originally created by [Drefvelin](https://github.com/Drefvelin).
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
 
-## Focus dependency
-
-This version requires RPCharacters 2.1.0 or later for character focus; Research no
-longer depends on TFMCCore. Deploy the matching RPCharacters, TFMCCore ownership
-handoff build (if installed), and Magic/Research consumers together, then restart.
-An older installed TFMCCore makes RPCharacters stand down focus to avoid duplicate
-writers, so experiments cannot spend focus until the plugin set is compatible.
-Existing Research player files remain available to RPCharacters for legacy focus
-imports; this change does not delete or rewrite them.
-
 ## License
 
 Copyright (c) 2026 TF-Minecraft contributors.
