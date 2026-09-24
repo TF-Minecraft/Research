@@ -15,7 +15,7 @@ project produces its result item at the station.
   add points to the project, while unneeded aspects are eventually rejected.
 - **Hidden recipes** — required aspects sit among decoy rows in a shuffled station
   menu, and both their identity and the product are revealed as research progresses.
-- **Character focus** — experiments spend TFMCCore mental points, and a configurable
+- **Character focus** — experiments spend RPCharacters focus points, and a configurable
   MMOCore attribute lowers the reveal and confirmation thresholds.
 - **Weighted result pools** — outputs grant a fixed item or roll from nested,
   weighted result templates using TLibs item paths.
