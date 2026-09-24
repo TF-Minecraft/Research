@@ -15,7 +15,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.proc>full</maven.compiler.proc>
-        <tfmccore.version>2.0.1</tfmccore.version>
+        <rpcharacters.version>2.1.0</rpcharacters.version>
         <tlibs.version>2.0.1</tlibs.version>
     </properties>
 
@@ -52,8 +52,8 @@
         </dependency>
         <dependency>
             <groupId>net.tfminecraft</groupId>
-            <artifactId>tfmccore</artifactId>
-            <version>${tfmccore.version}</version>
+            <artifactId>rpcharacters</artifactId>
+            <version>${rpcharacters.version}</version>
             <scope>provided</scope>
             <exclusions>
                 <exclusion>

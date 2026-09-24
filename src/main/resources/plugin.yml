@@ -3,7 +3,7 @@ api-version: '1.21.10'
 name: Research
 version: '${project.version}'
 author: Drefvelin
-depend: [MMOItems, MythicLib, ItemsAdder, TLibs, TFMCCore]
+depend: [MMOItems, MythicLib, ItemsAdder, TLibs, RPCharacters]
 softdepend: [MMOCore]
 
 commands:
