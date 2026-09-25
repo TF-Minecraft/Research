@@ -233,6 +233,7 @@ public final class ResearchManager implements Listener {
 
         ItemStack experiment = event.getView().getTopInventory().getItem(GridLayout.SLOT_EXPERIMENT);
         if (experiment != null && experiment.getType() != Material.AIR) {
+            event.getView().getTopInventory().setItem(GridLayout.SLOT_EXPERIMENT, null);
             returnItemToPlayer(player, experiment);
         }
         openGui.remove(player.getUniqueId());
@@ -641,11 +642,7 @@ public final class ResearchManager implements Listener {
             if (openTitle.equals(InventoryManager.mainInventoryTitle())) {
                 Location openLoc = openGui.get(ownerUuid);
                 if (openLoc != null && station.isAt(openLoc)) {
-                    ItemStack experiment = owner.getOpenInventory().getTopInventory()
-                            .getItem(GridLayout.SLOT_EXPERIMENT);
-                    if (experiment != null && experiment.getType() != Material.AIR) {
-                        returnItemToPlayer(owner, experiment);
-                    }
+                    // The close handler owns returning the experiment item.
                     owner.closeInventory();
                 }
             } else if (openTitle.equals(InventoryManager.scrapConfirmTitle())) {
