@@ -66,7 +66,9 @@ public final class InventoryManager {
     }
 
     public void openMain(Player player, ResearchStation station) {
-        Inventory inventory = Research.plugin.getServer().createInventory(null, 54, mainInventoryTitle());
+        StationMenuHolder holder = new StationMenuHolder(station.getLocation());
+        Inventory inventory = Research.plugin.getServer().createInventory(holder, 54, mainInventoryTitle());
+        holder.setInventory(inventory);
         populateMain(player, station, inventory);
         player.openInventory(inventory);
     }
@@ -368,8 +370,10 @@ public final class InventoryManager {
                 buildPreviewAspectItem(match.getSecondaryAspect(), match.getSecondaryPoints(), project));
     }
 
-    public void openScrapConfirm(Player player) {
-        Inventory inventory = Research.plugin.getServer().createInventory(null, 9, scrapConfirmTitle());
+    public void openScrapConfirm(Player player, ResearchStation station) {
+        StationMenuHolder holder = new StationMenuHolder(station.getLocation());
+        Inventory inventory = Research.plugin.getServer().createInventory(holder, 9, scrapConfirmTitle());
+        holder.setInventory(inventory);
         inventory.setItem(CONFIRM_SCRAP_YES, buildButton(GuiCache.confirmButton, GuiText.label(GuiCache.scrapConfirmYesLabel)));
         inventory.setItem(CONFIRM_SCRAP_NO, buildButton(GuiCache.cancelButton, GuiText.label(GuiCache.scrapConfirmNoLabel)));
         player.openInventory(inventory);

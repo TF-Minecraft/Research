@@ -1,7 +1,6 @@
 package net.tfminecraft.research.manager;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +20,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 
 import net.tfminecraft.research.Cache;
@@ -62,7 +62,6 @@ public final class ResearchManager implements Listener {
     private final InventoryManager inventoryManager;
 
     private final List<ResearchStation> stations = new ArrayList<>();
-    private final Map<UUID, Location> openGui = new HashMap<>();
 
     public ResearchManager(PlayerManager playerManager) {
         this.playerManager = playerManager;
@@ -76,14 +75,12 @@ public final class ResearchManager implements Listener {
 
     public void start() {
         stations.clear();
-        openGui.clear();
         stations.addAll(StationStore.loadAll());
     }
 
     public void unloadAll() {
         StationStore.saveAll(stations);
         stations.clear();
-        openGui.clear();
     }
 
     public ResearchStation getStationAt(Location location) {
@@ -181,7 +178,7 @@ public final class ResearchManager implements Listener {
 
         event.setCancelled(true);
 
-        ResearchStation station = resolveStationForPlayerGui(player);
+        ResearchStation station = resolveStationForMenu(player, event.getView());
         if (station == null) {
             return;
         }
@@ -236,13 +233,11 @@ public final class ResearchManager implements Listener {
             event.getView().getTopInventory().setItem(GridLayout.SLOT_EXPERIMENT, null);
             returnItemToPlayer(player, experiment);
         }
-        openGui.remove(player.getUniqueId());
     }
 
     private void handleMainClick(Player player, ResearchStation station, int slot, Inventory inventory) {
         if (slot == GridLayout.SLOT_SCRAP) {
-            openGui.put(player.getUniqueId(), blockLocation(station.getLocation()));
-            inventoryManager.openScrapConfirm(player);
+            inventoryManager.openScrapConfirm(player, station);
         } else if (slot == GridLayout.SLOT_CONFIRM_EXPERIMENT) {
             confirmExperiment(player, station, inventory);
         }
@@ -538,7 +533,6 @@ public final class ResearchManager implements Listener {
         Location loc = blockLocation(station.getLocation());
         StationCompleteEffects.play(player, loc);
         stations.remove(station);
-        openGui.remove(player.getUniqueId());
         StationStore.deleteStation(loc);
         inventory.clear();
         player.closeInventory();
@@ -638,17 +632,14 @@ public final class ResearchManager implements Listener {
 
         Player owner = Bukkit.getPlayer(ownerUuid);
         if (owner != null && owner.isOnline()) {
-            String openTitle = owner.getOpenInventory().getTitle();
-            if (openTitle.equals(InventoryManager.mainInventoryTitle())) {
-                Location openLoc = openGui.get(ownerUuid);
-                if (openLoc != null && station.isAt(openLoc)) {
-                    // The close handler owns returning the experiment item.
-                    owner.closeInventory();
-                }
-            } else if (openTitle.equals(InventoryManager.scrapConfirmTitle())) {
+            InventoryView openView = owner.getOpenInventory();
+            String openTitle = openView.getTitle();
+            if ((openTitle.equals(InventoryManager.mainInventoryTitle())
+                    || openTitle.equals(InventoryManager.scrapConfirmTitle()))
+                    && isMenuFor(openView, station)) {
+                // The close handler owns returning the experiment item.
                 owner.closeInventory();
             }
-            openGui.remove(ownerUuid);
             if (ownerMessage != null && !ownerMessage.isBlank()) {
                 owner.sendMessage(ownerMessage);
             }
@@ -659,27 +650,36 @@ public final class ResearchManager implements Listener {
     }
 
     private void openMainGui(Player player, ResearchStation station) {
-        openGui.put(player.getUniqueId(), blockLocation(station.getLocation()));
         inventoryManager.openMain(player, station);
     }
 
     /**
-     * Resolves the station for an open research GUI from the lectern location in {@link #openGui},
-     * or the player's owned station if that session map was lost (e.g. after reload).
+     * Resolves the station a research menu was opened for. Each menu carries its lectern location,
+     * so a player with several stations only ever acts on the one whose menu is open.
      */
-    private ResearchStation resolveStationForPlayerGui(Player player) {
-        Location openLoc = openGui.get(player.getUniqueId());
-        if (openLoc != null) {
-            ResearchStation atOpen = getStationAt(openLoc);
-            if (atOpen != null && atOpen.getOwnerUuid().equals(player.getUniqueId())) {
-                return atOpen;
-            }
+    private ResearchStation resolveStationForMenu(Player player, InventoryView view) {
+        Location menuLoc = menuStationLocation(view);
+        if (menuLoc == null) {
+            return null;
         }
-        for (ResearchStation station : stations) {
-            if (station.getOwnerUuid().equals(player.getUniqueId())) {
-                openGui.put(player.getUniqueId(), blockLocation(station.getLocation()));
-                return station;
-            }
+        ResearchStation station = getStationAt(menuLoc);
+        if (station == null || !station.getOwnerUuid().equals(player.getUniqueId())) {
+            return null;
+        }
+        return station;
+    }
+
+    private boolean isMenuFor(InventoryView view, ResearchStation station) {
+        Location menuLoc = menuStationLocation(view);
+        return menuLoc != null && station.isAt(menuLoc);
+    }
+
+    private Location menuStationLocation(InventoryView view) {
+        if (view == null || view.getTopInventory() == null) {
+            return null;
+        }
+        if (view.getTopInventory().getHolder() instanceof StationMenuHolder holder) {
+            return holder.getStationLocation();
         }
         return null;
     }

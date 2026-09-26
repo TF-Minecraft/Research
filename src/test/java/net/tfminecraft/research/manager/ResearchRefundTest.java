@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +67,7 @@ class ResearchRefundTest {
         when(view.getTitle()).thenReturn("Research Station");
         when(view.getTopInventory()).thenReturn(top);
         when(view.getPlayer()).thenReturn(owner);
+        when(top.getHolder()).thenReturn(new StationMenuHolder(location));
         when(top.getItem(GridLayout.SLOT_EXPERIMENT)).thenAnswer(call -> slot.get());
         doAnswer(call -> {
             slot.set(call.getArgument(1));
@@ -86,11 +86,6 @@ class ResearchRefundTest {
             menus.when(InventoryManager::mainInventoryTitle).thenReturn("Research Station");
             ResearchManager manager = new ResearchManager(null);
             manager.start();
-            Field field = ResearchManager.class.getDeclaredField("openGui");
-            field.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Map<UUID, Location> openGui = (Map<UUID, Location>) field.get(manager);
-            openGui.put(ownerId, location);
 
             // Bukkit dispatches InventoryCloseEvent synchronously from closeInventory().
             doAnswer(call -> {
