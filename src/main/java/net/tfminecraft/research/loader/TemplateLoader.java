@@ -50,8 +50,8 @@ public final class TemplateLoader implements LoaderInterface {
             String id = entry.getKey();
             List<ResultTemplateDef.WeightedOutput> validated = new ArrayList<>();
             for (ResultTemplateDef.WeightedOutput output : entry.getValue().getOutputs()) {
-                if (output.getWeight() <= 0) {
-                    Research.plugin.getLogger().severe("[Research] Template '" + id + "' has output with weight <= 0");
+                if (!Double.isFinite(output.getWeight()) || output.getWeight() <= 0) {
+                    Research.plugin.getLogger().severe("[Research] Template '" + id + "' has output with a nonfinite or nonpositive weight");
                     ok = false;
                     continue;
                 }
@@ -127,9 +127,14 @@ public final class TemplateLoader implements LoaderInterface {
             nextAncestors.add(nestedId);
             boolean anyValid = false;
             for (ResultTemplateDef.WeightedOutput output : nested.getOutputs()) {
-                if (isValidOutputRef(output.getRef(), nextAncestors, nestedId, raw)) {
-                    anyValid = true;
+                if (!Double.isFinite(output.getWeight()) || output.getWeight() <= 0) {
+                    continue;
                 }
+                // Every selectable branch must terminate, even when another branch is a valid item.
+                if (!isValidOutputRef(output.getRef(), nextAncestors, nestedId, raw)) {
+                    return false;
+                }
+                anyValid = true;
             }
             if (!anyValid) {
                 Research.plugin.getLogger().severe("[Research] Template '" + templateId + "' output '" + ref

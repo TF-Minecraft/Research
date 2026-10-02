@@ -1,5 +1,8 @@
 package net.tfminecraft.research.util;
 
+import java.util.Locale;
+
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 import net.tfminecraft.research.Research;
@@ -20,22 +23,26 @@ public final class SoundKeys {
         String namespace;
         String path;
         if (colon >= 0) {
-            namespace = trimmed.substring(0, colon).trim().toLowerCase();
+            namespace = trimmed.substring(0, colon).trim().toLowerCase(Locale.ROOT);
             path = trimmed.substring(colon + 1).trim();
         } else {
             namespace = "minecraft";
             path = trimmed;
         }
         if (looksLikeBukkitEnum(path)) {
-            path = path.toLowerCase().replace('_', '.');
+            try {
+                path = Sound.valueOf(path).getKey().getKey();
+            } catch (IllegalArgumentException ex) {
+                path = path.toLowerCase(Locale.ROOT).replace('_', '.');
+            }
         } else {
-            path = path.toLowerCase();
+            path = path.toLowerCase(Locale.ROOT);
         }
         return namespace + ":" + path;
     }
 
     private static boolean looksLikeBukkitEnum(String path) {
-        return path.equals(path.toUpperCase()) && path.contains("_");
+        return path.equals(path.toUpperCase(Locale.ROOT)) && path.contains("_");
     }
 
     public static void play(Player player, String soundKey, float volume, float pitch) {

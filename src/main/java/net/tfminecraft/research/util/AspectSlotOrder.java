@@ -83,11 +83,6 @@ public final class AspectSlotOrder {
         if (found.size() != expected.size()) {
             return false;
         }
-        for (String aspectId : expected) {
-            if (!found.contains(aspectId)) {
-                return false;
-            }
-        }
         return true;
     }
 

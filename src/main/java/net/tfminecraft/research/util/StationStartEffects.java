@@ -1,5 +1,7 @@
 package net.tfminecraft.research.util;
 
+import java.util.Locale;
+
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
@@ -37,7 +39,7 @@ public final class StationStartEffects {
             return null;
         }
         try {
-            return Particle.valueOf(name.trim().toUpperCase());
+            return Particle.valueOf(name.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             Research.plugin.getLogger().warning("[Research] Unknown station start particle: " + name);
             return null;

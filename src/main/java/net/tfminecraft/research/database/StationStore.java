@@ -138,6 +138,9 @@ public final class StationStore {
                         + " references missing world '" + data.getWorld() + "', skipping.");
                 return null;
             }
+            if (data.getOwnerUuid() == null) {
+                throw new IllegalArgumentException("Missing station owner_uuid");
+            }
             UUID owner = UUID.fromString(data.getOwnerUuid());
             ActiveProject project = new ActiveProject(
                     data.getInputId(),

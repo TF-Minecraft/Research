@@ -236,10 +236,6 @@ public final class InventoryManager {
     public void playConfirmRefreshWave(Player player, ResearchStation station, Inventory inventory,
             String pulseAspectId) {
         List<List<Integer>> rings = buildWaveRings();
-        if (rings.isEmpty()) {
-            populateMain(player, station, inventory);
-            return;
-        }
         ItemStack pulse = buildWavePulseFiller(pulseAspectId);
         ItemStack leftFiller = buildLeftFiller();
 
@@ -297,9 +293,6 @@ public final class InventoryManager {
             if (GridLayout.isReservedStationSlot(slot)) {
                 continue;
             }
-            if (UNFILLED_SLOTS.contains(slot)) {
-                continue;
-            }
             int row = GridLayout.slotToRow(slot);
             int col = GridLayout.slotToCol(slot);
             int dist = Math.max(Math.abs(row - GridLayout.PRODUCT_ROW), Math.abs(col - GridLayout.PRODUCT_COL));
@@ -313,10 +306,7 @@ public final class InventoryManager {
      * Aspect bars sit on the right of the divider and are never part of the wave.
      */
     private boolean isGridFillerOrPulseSlot(Inventory inventory, int slot) {
-        if (!GridLayout.isLeftPanelSlot(slot) || GridLayout.isReservedStationSlot(slot)
-                || UNFILLED_SLOTS.contains(slot)) {
-            return false;
-        }
+        // Callers only pass padding slots produced by buildWaveRings().
         ItemStack item = inventory.getItem(slot);
         if (item == null || item.getType() == Material.AIR) {
             return true;

@@ -26,10 +26,10 @@ public final class ExternalModifiers {
             return basePoints;
         }
         double bonusPercent = experiment.getDouble("aspect_point_bonus_percent", 0.0);
-        if (bonusPercent <= 0.0) {
+        if (!Double.isFinite(bonusPercent) || bonusPercent <= 0.0) {
             return basePoints;
         }
-        return basePoints + (int) Math.floor(basePoints * bonusPercent);
+        return (int) Math.min(Integer.MAX_VALUE, basePoints + Math.floor(basePoints * bonusPercent));
     }
 
     public static boolean isConfigured() {
