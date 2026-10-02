@@ -66,14 +66,15 @@ public final class ResultSpawnEffects {
     private static void startCritTrail(Entity entity, int maxTicks, int intervalTicks) {
         int interval = Math.max(1, intervalTicks);
         new BukkitRunnable() {
-            int t = 0;
+            long elapsedTicks = 0;
 
             @Override
             public void run() {
-                if (entity == null || !entity.isValid() || entity.isDead() || t++ >= maxTicks) {
+                if (entity == null || !entity.isValid() || entity.isDead() || elapsedTicks >= maxTicks) {
                     cancel();
                     return;
                 }
+                elapsedTicks += interval;
                 Location p = entity.getLocation().add(0, 0.1, 0);
                 p.getWorld().spawnParticle(Particle.CRIT, p, 4, 0.05, 0.05, 0.05, 0.0);
             }
@@ -87,9 +88,6 @@ public final class ResultSpawnEffects {
     }
 
     private static String displayNameOf(ItemStack item) {
-        if (item == null) {
-            return "Item";
-        }
         var meta = item.getItemMeta();
         if (meta != null && meta.hasDisplayName()) {
             return meta.getDisplayName();

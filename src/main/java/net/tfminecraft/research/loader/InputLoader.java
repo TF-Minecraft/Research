@@ -75,8 +75,11 @@ public final class InputLoader implements LoaderInterface {
             }
 
             InputDef def = new InputDef(key, section);
-            ok &= validate(def, configFile);
-            map.put(key, def);
+            if (validate(def, configFile)) {
+                map.put(key, def);
+            } else {
+                ok = false;
+            }
         }
         return ok;
     }
@@ -85,13 +88,7 @@ public final class InputLoader implements LoaderInterface {
         Map<String, String> seen = new LinkedHashMap<>();
         boolean ok = true;
         for (InputDef def : map.values()) {
-            if (!def.requiresStartItem()) {
-                continue;
-            }
             String normalized = ItemRef.normalize(def.getStartItemRef());
-            if (normalized.isBlank()) {
-                continue;
-            }
             String previous = seen.put(normalized, def.getId());
             if (previous != null && !previous.equals(def.getId())) {
                 Research.plugin.getLogger().severe("[Research] Start item '" + normalized
@@ -130,9 +127,9 @@ public final class InputLoader implements LoaderInterface {
                 ok = false;
                 continue;
             }
-            if (output.getWeight() <= 0) {
+            if (!Double.isFinite(output.getWeight()) || output.getWeight() <= 0) {
                 Research.plugin.getLogger().severe("[Research] Input '" + def.getId() + "' has output '"
-                        + output.getOutputId() + "' with weight <= 0 in " + configFile.getName());
+                        + output.getOutputId() + "' with a nonfinite or nonpositive weight in " + configFile.getName());
                 ok = false;
             }
             if (OutputLoader.getById(output.getOutputId()) == null) {
@@ -145,11 +142,6 @@ public final class InputLoader implements LoaderInterface {
     }
 
     private boolean validateItemRef(String inputId, String field, String ref, File configFile) {
-        if (ref == null || ref.isBlank()) {
-            Research.plugin.getLogger().severe("[Research] Input '" + inputId + "' missing " + field
-                    + " item in " + configFile.getName());
-            return false;
-        }
         if (!ItemRef.hasKnownPrefix(ref)) {
             Research.plugin.getLogger().severe("[Research] Input '" + inputId + "' has invalid " + field
                     + " item '" + ref + "' in " + configFile.getName());

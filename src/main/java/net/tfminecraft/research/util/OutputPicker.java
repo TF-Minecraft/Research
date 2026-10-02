@@ -18,20 +18,29 @@ public final class OutputPicker {
     }
 
     private static InputDef.WeightedOutput pickWeighted(List<InputDef.WeightedOutput> outputs) {
-        if (outputs == null || outputs.isEmpty()) {
+        if (outputs.isEmpty()) {
             return null;
+        }
+        // Scale before summing so finite weights cannot overflow the random bound.
+        double scale = 0.0;
+        for (InputDef.WeightedOutput output : outputs) {
+            scale = Math.max(scale, output.getWeight());
+        }
+        if (scale <= 0.0) {
+            return outputs.get(0);
         }
         double total = 0.0;
         for (InputDef.WeightedOutput output : outputs) {
-            total += output.getWeight();
+            total += output.getWeight() / scale;
         }
         if (total <= 0.0) {
             return outputs.get(0);
         }
         double roll = ThreadLocalRandom.current().nextDouble(total);
         double cumulative = 0.0;
-        for (InputDef.WeightedOutput output : outputs) {
-            cumulative += output.getWeight();
+        for (int i = 0; i < outputs.size() - 1; i++) {
+            InputDef.WeightedOutput output = outputs.get(i);
+            cumulative += output.getWeight() / scale;
             if (roll < cumulative) {
                 return output;
             }

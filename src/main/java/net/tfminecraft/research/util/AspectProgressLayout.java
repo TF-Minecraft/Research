@@ -30,7 +30,7 @@ public final class AspectProgressLayout {
             return 0;
         }
         int paneNumber = paneIndex + 1;
-        return (int) Math.ceil((paneNumber * requiredPoints) / (double) GridLayout.ASPECT_PROGRESS_PANES);
+        return (int) Math.ceil(((long) paneNumber * requiredPoints) / (double) GridLayout.ASPECT_PROGRESS_PANES);
     }
 
     public static boolean isPaneFilled(int paneIndex, int currentPoints, int requiredPoints) {

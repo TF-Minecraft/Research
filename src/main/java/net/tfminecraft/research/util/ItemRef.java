@@ -1,6 +1,7 @@
 package net.tfminecraft.research.util;
 
 import java.util.Collections;
+import java.util.Locale;
 
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemFlag;
@@ -22,7 +23,7 @@ public final class ItemRef {
             return "";
         }
         String trimmed = ref.trim();
-        if (trimmed.toLowerCase().startsWith("vanilla.")) {
+        if (trimmed.toLowerCase(Locale.ROOT).startsWith("vanilla.")) {
             return "v." + trimmed.substring("vanilla.".length());
         }
         return trimmed;
@@ -32,7 +33,7 @@ public final class ItemRef {
         if (ref == null || ref.isBlank()) {
             return false;
         }
-        String lower = ref.trim().toLowerCase();
+        String lower = ref.trim().toLowerCase(Locale.ROOT);
         return lower.startsWith("vanilla.")
                 || lower.startsWith("v.")
                 || lower.startsWith("m.")
@@ -61,7 +62,7 @@ public final class ItemRef {
             return false;
         }
         ItemStack item = build(ref);
-        return item != null && item.getType() != Material.AIR;
+        return item != null;
     }
 
     public static boolean matches(ItemStack stack, String ref) {

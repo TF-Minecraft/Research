@@ -11,6 +11,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -140,8 +141,11 @@ public final class ResearchManager implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onStationBreak(BlockBreakEvent event) {
+        if (event.isCancelled()) {
+            return;
+        }
         Block block = event.getBlock();
         if (block.getType() != Cache.stationBlock) {
             return;
@@ -184,7 +188,8 @@ public final class ResearchManager implements Listener {
         }
 
         if (title.equals(InventoryManager.scrapConfirmTitle())) {
-            if (event.getCurrentItem() == null) {
+            // Raw and local slots differ for the player's inventory below the menu.
+            if (event.getRawSlot() != event.getSlot() || event.getCurrentItem() == null) {
                 return;
             }
             handleScrapConfirmClick(player, station, event.getSlot());
@@ -227,6 +232,9 @@ public final class ResearchManager implements Listener {
         if (!event.getView().getTitle().equals(InventoryManager.mainInventoryTitle())) {
             return;
         }
+        if (!(event.getView().getTopInventory().getHolder() instanceof StationMenuHolder)) {
+            return;
+        }
 
         ItemStack experiment = event.getView().getTopInventory().getItem(GridLayout.SLOT_EXPERIMENT);
         if (experiment != null && experiment.getType() != Material.AIR) {
@@ -255,14 +263,7 @@ public final class ResearchManager implements Listener {
 
     private void handlePlayerInventoryToExperiment(InventoryClickEvent event, Player player, ResearchStation station) {
         Inventory clickedInventory = event.getClickedInventory();
-        if (clickedInventory == null) {
-            return;
-        }
-
         ItemStack stack = event.getCurrentItem();
-        if (stack == null || stack.getType() == Material.AIR) {
-            return;
-        }
 
         ExperimentMatch match = AspectItemRegistry.findByItemStack(stack);
         if (match == null) {
@@ -306,7 +307,7 @@ public final class ResearchManager implements Listener {
             return;
         }
         String inputSound = soundAspect.getSounds().getInput();
-        if (inputSound == null || inputSound.isBlank()) {
+        if (inputSound.isBlank()) {
             return;
         }
         SoundKeys.play(player, inputSound, soundAspect.getSounds().getVolume(), soundAspect.getSounds().getPitch());
@@ -397,11 +398,8 @@ public final class ResearchManager implements Listener {
                 return false;
             }
             active.addAspectPoints(aspectId, points, required);
-            if (active.getAspectPoints(aspectId) > before) {
-                reconcileAspectState(player, active, outputDef, aspectId);
-                return true;
-            }
-            return false;
+            reconcileAspectState(player, active, outputDef, aspectId);
+            return true;
         }
         return applyOffRecipeAspect(active, aspectId, points);
     }
@@ -415,9 +413,6 @@ public final class ResearchManager implements Listener {
         }
         active.addAspectPoints(aspectId, points, cap);
         int after = active.getAspectPoints(aspectId);
-        if (after <= before) {
-            return false;
-        }
         if (active.getAspectState(aspectId) == AspectState.UNKNOWN) {
             active.setAspectState(aspectId, AspectState.TESTING);
         }
@@ -448,7 +443,7 @@ public final class ResearchManager implements Listener {
 
     private void reconcileAspectState(Player player, ActiveProject active, OutputDef outputDef, String aspectId) {
         AspectState state = active.getAspectState(aspectId);
-        if (state == AspectState.CONFIRMED || state == AspectState.REJECTED) {
+        if (state == AspectState.CONFIRMED) {
             return;
         }
 
@@ -457,10 +452,6 @@ public final class ResearchManager implements Listener {
         }
 
         AspectRequirement requirement = outputDef.getAspects().get(aspectId);
-        if (requirement == null) {
-            return;
-        }
-
         int points = active.getAspectPoints(aspectId);
         int required = requirement.getRequiredPoints();
         if (DiscoveryScaling.meetsConfirmThreshold(player, points, required)) {
@@ -487,7 +478,7 @@ public final class ResearchManager implements Listener {
     private boolean checkProjectCompletion(Player player, ResearchStation station, OutputDef outputDef,
             Inventory inventory) {
         ActiveProject active = station.getProject();
-        if (active.isCompleted() || !isRecipeComplete(player, outputDef, active)) {
+        if (!isRecipeComplete(player, outputDef, active)) {
             return false;
         }
 
@@ -581,11 +572,6 @@ public final class ResearchManager implements Listener {
     }
 
     private ResearchStation startProject(Player player, Location location, EquipmentSlot hand, InputDef input) {
-        if (input == null) {
-            player.sendMessage(Messages.get("station.invalid_start_item"));
-            return null;
-        }
-
         String outputId = OutputPicker.roll(input);
         OutputDef output = outputId != null ? OutputLoader.getById(outputId) : null;
         if (output == null || !output.isEnabled()) {
@@ -594,7 +580,7 @@ public final class ResearchManager implements Listener {
         }
 
         String resolvedResultRef = ResultResolver.resolve(output.getResult());
-        if (resolvedResultRef == null || resolvedResultRef.isBlank()) {
+        if (resolvedResultRef == null) {
             Research.plugin.getLogger().severe("[Research] Could not resolve result for output '" + output.getId()
                     + "' at station start.");
             player.sendMessage(Messages.get("reload.failed"));
@@ -616,9 +602,6 @@ public final class ResearchManager implements Listener {
     }
 
     private boolean tryConsumeStartItemFromHand(Player player, EquipmentSlot hand, InputDef inputDef) {
-        if (!inputDef.requiresStartItem()) {
-            return true;
-        }
         return PlayerInventoryUtil.consumeFromHand(
                 player,
                 hand,
@@ -675,9 +658,6 @@ public final class ResearchManager implements Listener {
     }
 
     private Location menuStationLocation(InventoryView view) {
-        if (view == null || view.getTopInventory() == null) {
-            return null;
-        }
         if (view.getTopInventory().getHolder() instanceof StationMenuHolder holder) {
             return holder.getStationLocation();
         }

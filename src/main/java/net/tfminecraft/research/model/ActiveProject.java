@@ -154,7 +154,7 @@ public final class ActiveProject {
         if (current >= maxRequired) {
             return;
         }
-        aspectPoints.put(aspectId, Math.min(maxRequired, current + points));
+        aspectPoints.put(aspectId, (int) Math.min(maxRequired, (long) current + points));
     }
 
     public boolean hasTestedItem(String experimentItemId) {
