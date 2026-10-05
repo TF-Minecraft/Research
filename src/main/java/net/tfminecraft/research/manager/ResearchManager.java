@@ -109,9 +109,15 @@ public final class ResearchManager implements Listener {
             return;
         }
 
-        event.setCancelled(true);
         Location stationLoc = block.getLocation();
         ResearchStation station = getStationAt(stationLoc);
+        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
+        // A lectern with no project still places and opens written books.
+        if (station == null && shouldLeaveLecternToVanilla(block, player, hand)) {
+            return;
+        }
+
+        event.setCancelled(true);
 
         if (station != null) {
             if (!station.getOwnerUuid().equals(player.getUniqueId())) {
@@ -122,7 +128,6 @@ public final class ResearchManager implements Listener {
             return;
         }
 
-        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
         ItemStack held = PlayerInventoryUtil.getStackInHand(player, hand);
         InputDef input = InputMatcher.findByStartItem(held);
         if (input == null) {
@@ -662,6 +667,42 @@ public final class ResearchManager implements Listener {
             return holder.getStationLocation();
         }
         return null;
+    }
+
+    /**
+     * Lecterns without a project keep vanilla book behaviour: place a written book or book and
+     * quill, or open a book already on the lectern. An empty hand does not block a book in the
+     * other hand, so that click can still place it.
+     */
+    private boolean shouldLeaveLecternToVanilla(Block block, Player player, EquipmentSlot hand) {
+        if (block.getType() != Material.LECTERN) {
+            return false;
+        }
+        if (lecternHasBook(block)) {
+            return true;
+        }
+        ItemStack held = PlayerInventoryUtil.getStackInHand(player, hand);
+        if (isLecternBook(held)) {
+            return true;
+        }
+        EquipmentSlot other = hand == EquipmentSlot.OFF_HAND ? EquipmentSlot.HAND : EquipmentSlot.OFF_HAND;
+        return isEmptyHand(held) && isLecternBook(PlayerInventoryUtil.getStackInHand(player, other));
+    }
+
+    private static boolean lecternHasBook(Block block) {
+        return block.getBlockData() instanceof org.bukkit.block.data.type.Lectern lectern && lectern.hasBook();
+    }
+
+    private static boolean isLecternBook(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        Material type = stack.getType();
+        return type == Material.WRITTEN_BOOK || type == Material.WRITABLE_BOOK;
+    }
+
+    private static boolean isEmptyHand(ItemStack stack) {
+        return stack == null || stack.getType().isAir();
     }
 
     private Location blockLocation(Location location) {

@@ -21,6 +21,7 @@ import org.bukkit.Material;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.type.Lectern;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
@@ -354,6 +355,104 @@ class ResearchManagerTest {
         assertTrue(event.isCancelled());
         verify(player).sendMessage(material.equals("DIRT") ? "station.invalid_start_item" : "station.hold_start_item");
         assertNull(manager.getStationAt(location));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"WRITTEN_BOOK", "WRITABLE_BOOK"})
+    void emptyLecternAcceptsABookInTheUsedHand(String material) {
+        noStations();
+        ItemStack held = stack(Material.valueOf(material), 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND);
+        manager.onStationInteract(event);
+
+        assertFalse(event.isCancelled());
+        verify(player, never()).sendMessage(anyString());
+        assertNull(manager.getStationAt(location));
+        verifyNoInteractions(menus);
+    }
+
+    @Test
+    void emptyLecternAcceptsAWrittenBookInTheOffHand() {
+        noStations();
+        ItemStack held = stack(Material.WRITTEN_BOOK, 1);
+        when(bottom.getItemInOffHand()).thenReturn(held);
+
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND);
+        manager.onStationInteract(event);
+
+        assertFalse(event.isCancelled());
+        verify(player, never()).sendMessage(anyString());
+        assertNull(manager.getStationAt(location));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void emptyHandLeavesTheBookInTheOtherHandAlone(boolean bookInOffHand) {
+        noStations();
+        ItemStack book = stack(Material.WRITTEN_BOOK, 1);
+        when(bottom.getItemInMainHand()).thenReturn(bookInOffHand ? null : book);
+        when(bottom.getItemInOffHand()).thenReturn(bookInOffHand ? book : null);
+
+        EquipmentSlot used = bookInOffHand ? EquipmentSlot.HAND : EquipmentSlot.OFF_HAND;
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, used);
+        manager.onStationInteract(event);
+
+        assertFalse(event.isCancelled());
+        verify(player, never()).sendMessage(anyString());
+        assertNull(manager.getStationAt(location));
+    }
+
+    @Test
+    void lecternThatAlreadyHasABookOpensWithoutStartingResearch() {
+        noStations();
+        Lectern data = mock(Lectern.class);
+        when(data.hasBook()).thenReturn(true);
+        when(lectern.getBlockData()).thenReturn(data);
+        ItemStack held = stack(Material.PAPER, 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+        inputs.when(() -> InputMatcher.findByStartItem(held)).thenReturn(input("vanilla.PAPER", 1, "output"));
+
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND);
+        manager.onStationInteract(event);
+
+        assertFalse(event.isCancelled());
+        verify(player, never()).sendMessage(anyString());
+        assertNull(manager.getStationAt(location));
+        verifyNoInteractions(menus);
+    }
+
+    @Test
+    void writtenBookOnANonLecternStationIsStillRejected() {
+        noStations();
+        Cache.stationBlock = Material.STONE;
+        when(lectern.getType()).thenReturn(Material.STONE);
+        ItemStack held = stack(Material.WRITTEN_BOOK, 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND);
+        manager.onStationInteract(event);
+
+        assertTrue(event.isCancelled());
+        verify(player).sendMessage("station.invalid_start_item");
+        assertNull(manager.getStationAt(location));
+    }
+
+    @Test
+    void activeProjectStillOpensWhenThePlayerHoldsAWrittenBook() {
+        ItemStack held = stack(Material.WRITTEN_BOOK, 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+        Lectern data = mock(Lectern.class);
+        when(data.hasBook()).thenReturn(true);
+        when(lectern.getBlockData()).thenReturn(data);
+
+        PlayerInteractEvent event = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND);
+        manager.onStationInteract(event);
+
+        assertTrue(event.isCancelled());
+        verify(menus).openMain(player, station);
+        verify(player, never()).sendMessage(anyString());
     }
 
     @ParameterizedTest
