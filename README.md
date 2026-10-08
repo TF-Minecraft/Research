@@ -4,7 +4,7 @@
 
 Research turns lecterns into research stations. A player starts a project with a
 configured research item, then tests real items as experiments to work out which hidden
-aspects the project needs. Each experiment costs mental points, and a finished
+aspects the project needs. Each experiment spends character focus, and a finished
 project produces its result item at the station.
 
 ## Features
@@ -23,6 +23,8 @@ project produces its result item at the station.
   other plugins can react to discoveries.
 - **Persistent stations** — ownership, aspect progress, tested items, and the rolled
   result survive server restarts.
+- **Ordinary lectern use** — lecterns without an active project still accept and
+  open written books and books and quills.
 
 Originally created by [Drefvelin](https://github.com/Drefvelin).
 
@@ -34,12 +36,16 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 
 ## Tests and coverage
 
-Run `mvn clean verify` with Java 21 and the pinned plugin dependencies installed.
-The build runs the tests and enforces **100% executable-line coverage** across
+Run `mvn clean verify` with Java 21 after preparing the pinned private and shared
+dependencies using the [build dependency guide](https://github.com/TF-Minecraft/Docs/blob/main/PIPELINES.md#build-dependencies).
+JUnit 5, Mockito, and MockBukkit cover project progress, menus, item handling,
+persistence, configuration, and lifecycle behaviour. Surefire test results are
+in `target/surefire-reports/`. The build enforces **100% executable-line coverage** across
 all production Java classes, with no coverage exclusions. JaCoCo's HTML and XML
 reports are written to `target/site/jacoco/` and uploaded by the Build workflow.
 Branch and instruction coverage are reported separately; the enforced threshold
-is line coverage. Build and maintenance scripts are outside this runtime-code metric.
+is line coverage. Build and maintenance scripts are outside this runtime-code
+metric; live Focus, item-plugin, and MMOCore integrations need server testing.
 
 ## License
 
