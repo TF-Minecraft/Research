@@ -141,20 +141,20 @@ class ResearchUtilitiesTest {
     @Test
     void rowAssignmentsContainEveryAspectOnceAndKeepSixRows() {
         assertEquals(List.of("", "", "", "", "", ""), AspectSlotOrder.buildRowAssignments(null));
-        assertEquals(List.of("", "", "", "", "", ""), AspectSlotOrder.buildRowAssignments(output()));
-        List<String> rows = AspectSlotOrder.buildRowAssignments(output("fire", "water"));
+        assertEquals(List.of("", "", "", "", "", ""), AspectSlotOrder.buildRowAssignments(List.of()));
+        List<String> rows = AspectSlotOrder.buildRowAssignments(List.of("fire", "water"));
         assertEquals(6, rows.size());
         assertEquals(1, rows.stream().filter("fire"::equals).count());
         assertEquals(1, rows.stream().filter("water"::equals).count());
         assertEquals(4, rows.stream().filter(String::isEmpty).count());
-        List<String> truncated = AspectSlotOrder.buildRowAssignments(output("a", "b", "c", "d", "e", "f", "g"));
+        List<String> truncated = AspectSlotOrder.buildRowAssignments(List.of("a", "b", "c", "d", "e", "f", "g"));
         assertEquals(6, truncated.size());
         assertEquals(6, new HashSet<>(truncated).size());
     }
 
     @Test
     void reconcilesAbsentStaleDuplicateAndUnknownSavedRows() {
-        OutputDef output = output("fire", "water");
+        List<String> output = List.of("fire", "water");
         assertEquals(List.of("", "", "", "", "", ""),
                 AspectSlotOrder.reconcileRowAssignments(null, null, "missing"));
         List<List<String>> invalid = Arrays.asList(null, List.of(), List.of("fire"),
@@ -173,7 +173,7 @@ class ResearchUtilitiesTest {
     @Test
     void validSavedRowsAreCopiedAndNullsAreDecoys() {
         List<String> saved = new ArrayList<>(Arrays.asList("fire", "", null, "water", " ", ""));
-        List<String> result = AspectSlotOrder.reconcileRowAssignments(output("fire", "water"), saved, "station");
+        List<String> result = AspectSlotOrder.reconcileRowAssignments(List.of("fire", "water"), saved, "station");
         assertEquals(saved, result);
         assertNotSame(saved, result);
         saved.set(0, "changed");

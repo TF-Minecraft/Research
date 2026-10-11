@@ -566,6 +566,51 @@ class ResearchManagerTest {
         verify(menus).openMain(player, created);
     }
 
+    @Test
+    void startingDrawsPoolAspectsIntoTheProjectRecipe() {
+        noStations();
+        ItemStack held = stack(Material.PAPER, 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+        InputDef input = input("vanilla.PAPER", 1, "output");
+        inputs.when(() -> InputMatcher.findByStartItem(held)).thenReturn(input);
+        items.when(() -> ItemRef.matches(held, "vanilla.PAPER")).thenReturn(true);
+        YamlConfiguration config = outputConfig(Map.of("fire", 8));
+        config.set("aspect_pool.pick", 2);
+        for (String id : List.of("water", "earth", "air")) config.set("aspect_pool.aspects." + id + ".required_points", 4);
+        OutputLoader.get().put("output", new OutputDef("output", config));
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        ActiveProject created = manager.getStationAt(location).getProject();
+        List<String> drawn = created.getPoolAspects();
+        assertEquals(2, drawn.size());
+        assertTrue(List.of("water", "earth", "air").containsAll(drawn));
+        List<String> rows = created.getAspectSlotOrder().stream().filter(id -> !id.isBlank()).toList();
+        assertEquals(3, rows.size());
+        assertTrue(rows.contains("fire"));
+        assertTrue(rows.containsAll(drawn));
+    }
+
+    @Test
+    void onlyDrawnPoolAspectsCountTowardTheRecipe() {
+        prepareExperiment("water", "earth", Map.of());
+        YamlConfiguration config = outputConfig(Map.of());
+        config.set("aspect_pool.pick", 1);
+        config.set("aspect_pool.aspects.water.required_points", 10);
+        config.set("aspect_pool.aspects.earth.required_points", 1);
+        OutputLoader.get().put("output", new OutputDef("output", config));
+        project.setPoolAspects(List.of("water"));
+
+        confirm();
+
+        assertEquals(AspectState.TESTING, project.getAspectState("water"));
+        assertEquals(2, project.getAspectPoints("water"));
+        assertEquals(AspectState.TESTING, project.getAspectState("earth"),
+                "an undrawn pool aspect is off-recipe, so 1 point does not confirm it");
+        assertTrue(project.hasTestedItem("vanilla.COAL"));
+        assertSame(station, manager.getStationAt(location));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"unknown-output", "disabled", "unresolved", "missing-item"})
     void startFailuresDoNotCreateOrConsumeAProject(String failure) {

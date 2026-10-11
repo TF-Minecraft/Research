@@ -457,7 +457,7 @@ public final class ResearchManager implements Listener {
         if (active.getAspectState(aspectId) == AspectState.REJECTED) {
             return false;
         }
-        AspectRequirement requirement = outputDef.getAspects().get(aspectId);
+        AspectRequirement requirement = outputDef.getRecipeAspects(active).get(aspectId);
         if (requirement != null) {
             int required = requirement.getRequiredPoints();
             int before = active.getAspectPoints(aspectId);
@@ -518,7 +518,7 @@ public final class ResearchManager implements Listener {
             active.setAspectState(aspectId, AspectState.TESTING);
         }
 
-        AspectRequirement requirement = outputDef.getAspects().get(aspectId);
+        AspectRequirement requirement = outputDef.getRecipeAspects(active).get(aspectId);
         int points = active.getAspectPoints(aspectId);
         int required = requirement.getRequiredPoints();
         if (DiscoveryScaling.meetsConfirmThreshold(player, points, required)) {
@@ -609,7 +609,7 @@ public final class ResearchManager implements Listener {
     }
 
     private boolean isRecipeComplete(Player player, OutputDef outputDef, ActiveProject active) {
-        for (Map.Entry<String, AspectRequirement> entry : outputDef.getAspects().entrySet()) {
+        for (Map.Entry<String, AspectRequirement> entry : outputDef.getRecipeAspects(active).entrySet()) {
             String aspectId = entry.getKey();
             if (active.getAspectState(aspectId) != AspectState.CONFIRMED) {
                 return false;
@@ -664,7 +664,8 @@ public final class ResearchManager implements Listener {
         }
 
         ActiveProject project = new ActiveProject(input.getId(), output.getId(), resolvedResultRef);
-        project.setAspectSlotOrder(AspectSlotOrder.buildRowAssignments(output));
+        project.setPoolAspects(output.rollPoolAspects());
+        project.setAspectSlotOrder(AspectSlotOrder.buildRowAssignments(output.getRecipeAspects(project).keySet()));
         ResearchStation station = new ResearchStation(blockLocation(location), player.getUniqueId(), project);
         station.setOwnerCharacterId(playerManager.getActiveCharacterId(player));
         stations.add(station);

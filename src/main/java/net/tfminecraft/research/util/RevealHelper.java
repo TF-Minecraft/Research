@@ -10,7 +10,7 @@ public final class RevealHelper {
 
     public static int countConfirmedRecipeAspects(ActiveProject active, OutputDef def) {
         int count = 0;
-        for (String aspectId : def.getAspects().keySet()) {
+        for (String aspectId : def.getRecipeAspects(active).keySet()) {
             if (active.getAspectState(aspectId) == AspectState.CONFIRMED) {
                 count++;
             }

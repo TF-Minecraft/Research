@@ -23,6 +23,7 @@ public final class StationSaveData {
     private Map<String, String> aspect_states = new HashMap<>();
     private List<String> tested_items = new ArrayList<>();
     private List<String> aspect_slot_order = new ArrayList<>();
+    private List<String> pool_aspects = new ArrayList<>();
 
     public String getWorld() {
         return world;
@@ -166,5 +167,13 @@ public final class StationSaveData {
 
     public void setAspectSlotOrder(List<String> aspectSlotOrder) {
         this.aspect_slot_order = aspectSlotOrder != null ? aspectSlotOrder : new ArrayList<>();
+    }
+
+    public List<String> getPoolAspects() {
+        return pool_aspects;
+    }
+
+    public void setPoolAspects(List<String> poolAspects) {
+        this.pool_aspects = poolAspects != null ? poolAspects : new ArrayList<>();
     }
 }

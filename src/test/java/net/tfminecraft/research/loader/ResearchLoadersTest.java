@@ -223,6 +223,51 @@ class ResearchLoadersTest {
     }
 
     @Test
+    void outputAspectPoolsLoadAndValidatePickSizeOverlapAndRows() throws Exception {
+        for (String id : List.of("fire", "water", "earth", "air")) AspectLoader.get().put(id, new AspectDef(id, config("{}")));
+        File good = yaml("pool-good/a.yml", """
+                pooled:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  aspects: {fire: {required_points: 3}}
+                  aspect_pool:
+                    pick: 2
+                    aspects:
+                      water: {required_points: 4}
+                      earth: {required_points: 5}
+                      air: {required_points: 6}
+                  result: {item: v.paper}
+                """);
+        assertTrue(new OutputLoader().loadFolder(good.getParentFile()));
+        OutputDef pooled = OutputLoader.getById("pooled");
+        assertEquals(2, pooled.getAspectPoolPick());
+        assertEquals(List.of("water", "earth", "air"), List.copyOf(pooled.getAspectPool().keySet()));
+        assertEquals(5, pooled.getAspectPool().get("earth").getRequiredPoints());
+
+        File bad = yaml("pool-bad/a.yml", """
+                pick-without-pool: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspect_pool: {pick: 1}}
+                pick-too-big: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspect_pool: {pick: 3, aspects: {water: {required_points: 1}, earth: {required_points: 1}}}}
+                pick-zero: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspect_pool: {aspects: {water: {required_points: 1}}}}
+                overlap: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspects: {fire: {required_points: 1}}, aspect_pool: {pick: 1, aspects: {fire: {required_points: 1}}}}
+                bad-pool-aspect: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspect_pool: {pick: 1, aspects: {ghost: {required_points: 0}}}}
+                too-many-rows:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  result: {item: v.paper}
+                  aspects: {fire: {required_points: 1}, water: {required_points: 1}, earth: {required_points: 1}, air: {required_points: 1}}
+                  aspect_pool: {pick: 3, aspects: {a: {required_points: 1}, b: {required_points: 1}, c: {required_points: 1}}}
+                """);
+        assertFalse(new OutputLoader().loadFolder(bad.getParentFile()));
+        verify(logger).severe(contains("'pick-without-pool' sets aspect_pool.pick but lists no aspect_pool.aspects"));
+        verify(logger).severe(contains("'pick-too-big' aspect_pool.pick must be between 1 and 2 (the pool size), got 3"));
+        verify(logger).severe(contains("'pick-zero' aspect_pool.pick must be between 1 and 1 (the pool size), got 0"));
+        verify(logger).severe(contains("'overlap' lists aspect 'fire' in both aspects and aspect_pool"));
+        verify(logger).severe(contains("'bad-pool-aspect' references unknown pool aspect 'ghost'"));
+        verify(logger).severe(contains("'bad-pool-aspect' pool aspect 'ghost' must have required_points > 0"));
+        verify(logger).severe(contains("'too-many-rows' has 7 aspects but the station GUI supports 6"));
+    }
+
+    @Test
     void inputValidationChecksStartItemsWeightsTargetsAndDuplicateItems() throws Exception {
         OutputLoader.get().put("known", new OutputDef("known", config("{}")));
         File file = yaml("inputs/a.yml", """

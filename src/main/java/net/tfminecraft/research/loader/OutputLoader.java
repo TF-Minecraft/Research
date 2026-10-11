@@ -88,28 +88,65 @@ public final class OutputLoader implements LoaderInterface {
         ok &= validateItemRef(def.getId(), "mystery_display", def.getMysteryDisplayItemRef(), configFile);
         ok &= validateItemRef(def.getId(), "product_display", def.getProductDisplayItemRef(), configFile);
 
-        if (def.getAspects().size() > GridLayout.ASPECT_ROW_COUNT) {
+        int recipeSize = def.getAspects().size() + def.getAspectPoolPick();
+        if (recipeSize > GridLayout.ASPECT_ROW_COUNT) {
             Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' has "
-                    + def.getAspects().size() + " aspects but the station GUI supports "
+                    + recipeSize + " aspects but the station GUI supports "
                     + GridLayout.ASPECT_ROW_COUNT + " in " + configFile.getName());
             ok = false;
         }
 
-        for (Map.Entry<String, AspectRequirement> entry : def.getAspects().entrySet()) {
+        ok &= validateAspects(def.getId(), "", def.getAspects(), configFile);
+        ok &= validateAspectPool(def, configFile);
+        ok &= validateResult(def, configFile);
+        return ok;
+    }
+
+    private boolean validateAspects(String outputId, String field, Map<String, AspectRequirement> aspects,
+            File configFile) {
+        boolean ok = true;
+        for (Map.Entry<String, AspectRequirement> entry : aspects.entrySet()) {
             String aspectId = entry.getKey();
             if (AspectLoader.getById(aspectId) == null) {
-                Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' references unknown aspect '"
-                        + aspectId + "' in " + configFile.getName());
+                Research.plugin.getLogger().severe("[Research] Output '" + outputId + "' references unknown "
+                        + field + "aspect '" + aspectId + "' in " + configFile.getName());
                 ok = false;
             }
             if (entry.getValue().getRequiredPoints() <= 0) {
-                Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' aspect '" + aspectId
-                        + "' must have required_points > 0 in " + configFile.getName());
+                Research.plugin.getLogger().severe("[Research] Output '" + outputId + "' " + field + "aspect '"
+                        + aspectId + "' must have required_points > 0 in " + configFile.getName());
                 ok = false;
             }
         }
+        return ok;
+    }
 
-        ok &= validateResult(def, configFile);
+    private boolean validateAspectPool(OutputDef def, File configFile) {
+        int pick = def.getAspectPoolPick();
+        Map<String, AspectRequirement> pool = def.getAspectPool();
+        if (pool.isEmpty()) {
+            if (pick != 0) {
+                Research.plugin.getLogger().severe("[Research] Output '" + def.getId()
+                        + "' sets aspect_pool.pick but lists no aspect_pool.aspects in " + configFile.getName());
+                return false;
+            }
+            return true;
+        }
+
+        boolean ok = validateAspects(def.getId(), "pool ", pool, configFile);
+        if (pick < 1 || pick > pool.size()) {
+            Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' aspect_pool.pick must be"
+                    + " between 1 and " + pool.size() + " (the pool size), got " + pick + " in "
+                    + configFile.getName());
+            ok = false;
+        }
+        for (String aspectId : pool.keySet()) {
+            if (def.getAspects().containsKey(aspectId)) {
+                Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' lists aspect '"
+                        + aspectId + "' in both aspects and aspect_pool in " + configFile.getName());
+                ok = false;
+            }
+        }
         return ok;
     }
 

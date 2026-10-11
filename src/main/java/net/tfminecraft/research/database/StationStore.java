@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -84,6 +85,7 @@ public final class StationStore {
         data.setAspectStates(new java.util.HashMap<>(project.getAspectStates()));
         data.setTestedItems(new java.util.ArrayList<>(project.getTestedExperimentItems()));
         data.setAspectSlotOrder(new java.util.ArrayList<>(project.getAspectSlotOrder()));
+        data.setPoolAspects(new java.util.ArrayList<>(project.getPoolAspects()));
 
         try {
             DurableFiles.write(file.toPath(), GSON.toJson(data));
@@ -163,11 +165,19 @@ public final class StationStore {
             }
             OutputDef outputDef = OutputLoader.getById(data.getResolvedOutputId());
             String context = "station " + file.getName();
+            List<String> savedPool = data.getPoolAspects() != null ? data.getPoolAspects() : List.of();
+            project.setPoolAspects(outputDef.reconcilePoolAspects(savedPool));
+            if (!project.getPoolAspects().equals(savedPool)) {
+                Research.plugin.getLogger().warning("[Research] Pool aspects for " + context + " changed from "
+                        + savedPool + " to " + project.getPoolAspects() + " to match output '"
+                        + outputDef.getId() + "'.");
+            }
             List<String> savedOrder = data.getAspectSlotOrder();
+            Collection<String> recipe = outputDef.getRecipeAspects(project).keySet();
             if (savedOrder == null || savedOrder.isEmpty()) {
-                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(outputDef, null, context));
+                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(recipe, null, context));
             } else {
-                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(outputDef, savedOrder, context));
+                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(recipe, savedOrder, context));
             }
             ResearchStation station = new ResearchStation(location, owner, project);
             station.setOwnerCharacterId(data.getOwnerCharacterId());
