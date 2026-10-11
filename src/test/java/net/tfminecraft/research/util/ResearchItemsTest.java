@@ -365,6 +365,19 @@ class ResearchItemsTest {
     }
 
     @Test
+    void activeCharacterIdComesFromRpCharacters() {
+        PlayerManager manager = new PlayerManager();
+        net.tfminecraft.rpcharacters.objects.RPCharacter character =
+                mock(net.tfminecraft.rpcharacters.objects.RPCharacter.class);
+        when(character.getId()).thenReturn("alice");
+        try (MockedStatic<RPCharacters> api = mockStatic(RPCharacters.class)) {
+            assertNull(manager.getActiveCharacterId(player));
+            api.when(() -> RPCharacters.getActiveCharacter(player)).thenReturn(character);
+            assertEquals("alice", manager.getActiveCharacterId(player));
+        }
+    }
+
+    @Test
     void staticUtilitiesHavePrivateConstructors() throws Exception {
         for (Class<?> type : List.of(ItemRef.class, InputMatcher.class, AspectItemRegistry.class,
                 PlayerInventoryUtil.class, MmoAttributes.class)) {

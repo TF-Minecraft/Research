@@ -342,6 +342,61 @@ class ResearchManagerTest {
         verifyNoInteractions(menus);
     }
 
+    @Test
+    void anotherCharacterOnTheAccountCannotOpenTheProject() {
+        station.setOwnerCharacterId("alice");
+        when(points.getActiveCharacterId(player)).thenReturn("bob");
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        verify(player).sendMessage("station.in_use");
+        verifyNoInteractions(menus);
+        assertEquals("alice", station.getOwnerCharacterId());
+    }
+
+    @Test
+    void anotherCharacterCannotSpendFocusThroughAnAlreadyOpenMenu() {
+        station.setOwnerCharacterId("alice");
+        when(points.getActiveCharacterId(player)).thenReturn("bob");
+        prepareExperiment("fire", "water", Map.of("fire", 10, "water", 10));
+
+        confirm();
+
+        verify(points, never()).trySpendMentalPoints(any(), anyInt());
+        assertEquals(0, project.getAspectPoints("fire"));
+        store.verify(() -> StationStore.saveStation(any()), never());
+    }
+
+    @Test
+    void startingCharacterKeepsWorkingOnItsProject() {
+        station.setOwnerCharacterId("alice");
+        when(points.getActiveCharacterId(player)).thenReturn("alice");
+        prepareExperiment("fire", "water", Map.of("fire", 10, "water", 10));
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        confirm();
+
+        verify(menus).openMain(player, station);
+        verify(points).trySpendMentalPoints(player, 1);
+        assertEquals(2, project.getAspectPoints("fire"));
+    }
+
+    @Test
+    void olderStationsBelongToTheNextCharacterToOpenThem() {
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        assertNull(station.getOwnerCharacterId());
+        store.verify(() -> StationStore.saveStation(any()), never());
+
+        when(points.getActiveCharacterId(player)).thenReturn("alice");
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        assertEquals("alice", station.getOwnerCharacterId());
+        store.verify(() -> StationStore.saveStation(station));
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        store.verify(() -> StationStore.saveStation(station), times(1));
+        verify(menus, times(3)).openMain(player, station);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"null", "AIR", "DIRT"})
     void startingWithoutAMatchingInputExplainsTheProblem(String material) {
@@ -467,12 +522,14 @@ class ResearchManagerTest {
         inputs.when(() -> InputMatcher.findByStartItem(held)).thenReturn(input);
         items.when(() -> ItemRef.matches(held, "vanilla.PAPER")).thenReturn(true);
         output(Map.of("fire", 8));
+        when(points.getActiveCharacterId(player)).thenReturn("alice");
 
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, hand));
 
         ResearchStation created = manager.getStationAt(location);
         assertNotNull(created);
         assertEquals(owner, created.getOwnerUuid());
+        assertEquals("alice", created.getOwnerCharacterId());
         assertEquals("input", created.getProject().getInputId());
         assertEquals("output", created.getProject().getResolvedOutputId());
         assertEquals("vanilla.DIAMOND", created.getProject().getResolvedResultRef());

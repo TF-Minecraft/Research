@@ -75,6 +75,7 @@ public final class StationStore {
         data.setY(loc.getBlockY());
         data.setZ(loc.getBlockZ());
         data.setOwnerUuid(station.getOwnerUuid().toString());
+        data.setOwnerCharacterId(station.getOwnerCharacterId());
         data.setInputId(project.getInputId());
         data.setResolvedOutputId(project.getResolvedOutputId());
         data.setResolvedResultRef(project.getResolvedResultRef());
@@ -168,7 +169,9 @@ public final class StationStore {
             } else {
                 project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(outputDef, savedOrder, context));
             }
-            return new ResearchStation(location, owner, project);
+            ResearchStation station = new ResearchStation(location, owner, project);
+            station.setOwnerCharacterId(data.getOwnerCharacterId());
+            return station;
         } catch (IOException | com.google.gson.JsonSyntaxException | IllegalArgumentException ex) {
             Research.plugin.getLogger().warning("[Research] Failed to load station file " + file.getName() + ": "
                     + ex.getMessage());

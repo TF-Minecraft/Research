@@ -12,6 +12,7 @@ public final class StationSaveData {
     private int y;
     private int z;
     private String owner_uuid;
+    private String owner_character_id;
     private String input_id;
     private String resolved_output_id;
     private String resolved_result_ref;
@@ -61,6 +62,14 @@ public final class StationSaveData {
 
     public void setOwnerUuid(String ownerUuid) {
         this.owner_uuid = ownerUuid;
+    }
+
+    public String getOwnerCharacterId() {
+        return owner_character_id;
+    }
+
+    public void setOwnerCharacterId(String ownerCharacterId) {
+        this.owner_character_id = ownerCharacterId;
     }
 
     public String getInputId() {
