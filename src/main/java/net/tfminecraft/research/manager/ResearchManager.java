@@ -120,10 +120,11 @@ public final class ResearchManager implements Listener {
         event.setCancelled(true);
 
         if (station != null) {
-            if (!station.getOwnerUuid().equals(player.getUniqueId())) {
+            if (!isOwnedBy(station, player)) {
                 player.sendMessage(Messages.get("station.in_use"));
                 return;
             }
+            claimForActiveCharacter(station, player);
             openMainGui(player, station);
             return;
         }
@@ -600,6 +601,7 @@ public final class ResearchManager implements Listener {
         ActiveProject project = new ActiveProject(input.getId(), output.getId(), resolvedResultRef);
         project.setAspectSlotOrder(AspectSlotOrder.buildRowAssignments(output));
         ResearchStation station = new ResearchStation(blockLocation(location), player.getUniqueId(), project);
+        station.setOwnerCharacterId(playerManager.getActiveCharacterId(player));
         stations.add(station);
         StationStore.saveStation(station);
         StationStartEffects.play(player, blockLocation(location));
@@ -651,10 +653,34 @@ public final class ResearchManager implements Listener {
             return null;
         }
         ResearchStation station = getStationAt(menuLoc);
-        if (station == null || !station.getOwnerUuid().equals(player.getUniqueId())) {
+        if (station == null || !isOwnedBy(station, player)) {
             return null;
         }
         return station;
+    }
+
+    /**
+     * Only the character who started a project may work on it, so other characters on the
+     * account cannot add their focus.
+     */
+    private boolean isOwnedBy(ResearchStation station, Player player) {
+        if (!station.getOwnerUuid().equals(player.getUniqueId())) {
+            return false;
+        }
+        String ownerCharacterId = station.getOwnerCharacterId();
+        return ownerCharacterId == null || ownerCharacterId.equals(playerManager.getActiveCharacterId(player));
+    }
+
+    /** Stations saved before characters were recorded belong to the next character to open them. */
+    private void claimForActiveCharacter(ResearchStation station, Player player) {
+        if (station.getOwnerCharacterId() != null) {
+            return;
+        }
+        String characterId = playerManager.getActiveCharacterId(player);
+        if (characterId != null) {
+            station.setOwnerCharacterId(characterId);
+            StationStore.saveStation(station);
+        }
     }
 
     private boolean isMenuFor(InventoryView view, ResearchStation station) {

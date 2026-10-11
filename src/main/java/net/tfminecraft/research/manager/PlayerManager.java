@@ -4,6 +4,7 @@ import org.bukkit.entity.Player;
 
 import net.tfminecraft.rpcharacters.RPCharacters;
 import net.tfminecraft.rpcharacters.focus.FocusService;
+import net.tfminecraft.rpcharacters.objects.RPCharacter;
 
 public final class PlayerManager {
 
@@ -15,6 +16,12 @@ public final class PlayerManager {
 
     public static PlayerManager getInstance() {
         return instance;
+    }
+
+    /** The active RPCharacters character ID, or null without one. */
+    public String getActiveCharacterId(Player player) {
+        RPCharacter character = RPCharacters.getActiveCharacter(player);
+        return character != null ? character.getId() : null;
     }
 
     public int getMentalPoints(Player player) {

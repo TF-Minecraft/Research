@@ -96,12 +96,14 @@ class ResearchPersistenceTest {
         List<ResearchStation> loaded = assertDoesNotThrow(StationStore::loadAll);
         assertEquals(1, loaded.size());
         assertEquals(OWNER, loaded.getFirst().getOwnerUuid());
+        assertNull(loaded.getFirst().getOwnerCharacterId());
         verify(logger).warning(contains("bad.json"));
     }
 
     @Test
     void roundTripPreservesOwnerProjectProgressAndSavedRows() throws Exception {
         ResearchStation original = station();
+        original.setOwnerCharacterId("alice");
         ActiveProject project = original.getProject();
         project.getAspectPoints().put("fire", 7);
         project.getAspectTestCounts().put("fire", 2);
@@ -114,6 +116,7 @@ class ResearchPersistenceTest {
         ResearchStation actual = loaded.getFirst();
         assertEquals(original.getLocation(), actual.getLocation());
         assertEquals(OWNER, actual.getOwnerUuid());
+        assertEquals("alice", actual.getOwnerCharacterId());
         assertEquals("input", actual.getProject().getInputId());
         assertEquals("output", actual.getProject().getResolvedOutputId());
         assertEquals("minecraft:diamond", actual.getProject().getResolvedResultRef());

@@ -10,6 +10,7 @@ public final class ResearchStation {
 
     private final Location location;
     private UUID ownerUuid;
+    private String ownerCharacterId;
     private ActiveProject project;
 
     public ResearchStation(Location location, UUID ownerUuid, ActiveProject project) {
@@ -28,6 +29,15 @@ public final class ResearchStation {
 
     public void setOwnerUuid(UUID ownerUuid) {
         this.ownerUuid = ownerUuid;
+    }
+
+    /** The character who started the project; null for stations saved before characters were recorded. */
+    public String getOwnerCharacterId() {
+        return ownerCharacterId;
+    }
+
+    public void setOwnerCharacterId(String ownerCharacterId) {
+        this.ownerCharacterId = ownerCharacterId;
     }
 
     public ActiveProject getProject() {
