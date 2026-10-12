@@ -383,10 +383,6 @@ public final class ResearchManager implements Listener {
             return;
         }
 
-        if (!((StationMenuHolder) inventory.getHolder()).isCurrent(player)) {
-            return;
-        }
-
         project.markTested(match.getItemRef());
         boolean primaryScored = applyExperimentAspect(player, project, outputDef, match.getPrimaryAspect(),
                 ExternalModifiers.adjustExperimentPoints(player, match.getPrimaryPoints()));

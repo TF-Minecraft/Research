@@ -4,6 +4,7 @@ import net.tfminecraft.research.command.CommandManager;
 import net.tfminecraft.research.loader.ConfigLoader;
 import net.tfminecraft.research.manager.*;
 import net.tfminecraft.research.util.ItemRef;
+import net.tfminecraft.tlibs.character.Characters;
 import org.bukkit.command.*;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.*;
@@ -46,6 +47,17 @@ class ResearchLifecycleTest {
         plugin.onEnable(); // Existing resources and folders survive a later enable.
         assertTrue(Files.readString(plugin.getDataFolder().toPath().resolve("config.yml")).contains("external_modifiers"));
         plugin.onDisable(); verify(plugin.getResearchManager()).unloadAll();
+    }
+    @Test void olderTLibsDisablesResearchBeforeItRegistersAnything() {
+        try (MockedStatic<Characters> characters = mockStatic(Characters.class)) {
+            characters.when(Characters::available).thenThrow(new NoClassDefFoundError("CharacterSession"));
+            Research plugin = MockBukkit.load(Research.class);
+            assertFalse(plugin.isEnabled());
+            ResearchManager manager = managers.constructed().getFirst();
+            verify(manager, never()).start(); verify(manager, never()).unloadAll();
+            assertFalse(Files.exists(plugin.getDataFolder().toPath().resolve("config.yml")));
+            assertFalse(plugin.getCommand("research").getExecutor() instanceof CommandManager);
+        }
     }
     @Test void firstInstallCreatesTheDataRootWhenItDoesNotExist() throws Exception {
         Research plugin = MockBukkit.load(Research.class);
