@@ -277,7 +277,7 @@ class ResearchPersistenceTest {
         ActiveProject project = new ActiveProject("other", "output", "minecraft:coal", false);
         station.setProject(project);
         assertSame(project, station.getProject());
-        StationMenuHolder holder = new StationMenuHolder(station.getLocation());
+        StationMenuHolder holder = new StationMenuHolder(station.getLocation(), null);
         assertEquals(station.getLocation(), holder.getStationLocation());
         Inventory inventory = mock(Inventory.class);
         Method setter = StationMenuHolder.class.getDeclaredMethod("setInventory", Inventory.class);

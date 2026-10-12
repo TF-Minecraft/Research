@@ -7,6 +7,10 @@ import static org.mockito.Mockito.*;
 import java.lang.reflect.Field;
 import java.util.*;
 
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
+import java.util.concurrent.atomic.AtomicReference;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -46,6 +50,8 @@ class InventoryManagerTest {
     private PlayerMock player;
     private Research previousPlugin;
     private Research plugin;
+    private CharacterSession session;
+    private AtomicReference<CharacterSession> currentSession;
     private PlayerManager playerManager;
     private InventoryManager manager;
     private ActiveProject project;
@@ -64,6 +70,11 @@ class InventoryManagerTest {
         previousPlugin = Research.plugin;
         server = MockBukkit.mock();
         player = server.addPlayer();
+        session = new CharacterSession(new CharacterRef(player.getUniqueId(), UUID.randomUUID()), 1);
+        currentSession = new AtomicReference<>(session);
+        MockedStatic<Characters> characters = scoped(mockStatic(Characters.class));
+        characters.when(() -> Characters.currentSession(player)).thenAnswer(call -> Optional.ofNullable(currentSession.get()));
+        characters.when(() -> Characters.isCurrent(any())).thenAnswer(call -> call.getArgument(0).equals(currentSession.get()));
         plugin = mock(Research.class);
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getName()).thenReturn("Research");
@@ -357,6 +368,33 @@ class InventoryManagerTest {
         assertEquals(Material.BLACK_STAINED_GLASS_PANE, inv.getItem(1).getType());
     }
 
+    @Test void pendingSessionCannotOpenEitherMenu() {
+        InventoryView before = player.getOpenInventory();
+        currentSession.set(null);
+        manager.openMain(player, station);
+        manager.openScrapConfirm(player, station);
+        assertSame(before, player.getOpenInventory());
+    }
+
+    @Test void waveRejectsUnboundInventory() {
+        Inventory inventory = mock(Inventory.class);
+        manager.playConfirmRefreshWave(player, station, inventory, null);
+        server.getScheduler().performTicks(15);
+        verify(inventory).getHolder();
+        verifyNoMoreInteractions(inventory);
+    }
+
+    @Test void waveStopsAfterSwitchingAwayAndBackToTheSameCharacter() {
+        Inventory inv = openMain();
+        manager.playConfirmRefreshWave(player, station, inv, "fire");
+        currentSession.set(new CharacterSession(new CharacterRef(player.getUniqueId(), UUID.randomUUID()), 2));
+        currentSession.set(new CharacterSession(session.ref(), 3));
+        project.setProductRevealed(true);
+        server.getScheduler().performTicks(15);
+        assertEquals(Material.BLACK_STAINED_GLASS_PANE, inv.getItem(1).getType());
+        assertEquals(Material.CHEST, inv.getItem(GridLayout.SLOT_PRODUCT).getType());
+    }
+
     @Test void waveStopsWhenViewerLeavesOrChangesInventoryOrTitle() {
         Inventory inv = openMain(); Player offline = mock(Player.class);
         manager.playConfirmRefreshWave(offline, station, inv, null);
@@ -366,6 +404,7 @@ class InventoryManagerTest {
         server.getScheduler().performOneTick(); server.getScheduler().performTicks(12);
         Player renamedView = mock(Player.class); InventoryView view = mock(InventoryView.class);
         when(renamedView.isOnline()).thenReturn(true); when(renamedView.getOpenInventory()).thenReturn(view);
+        when(renamedView.getUniqueId()).thenReturn(player.getUniqueId());
         when(view.getTopInventory()).thenReturn(inv); when(view.getTitle()).thenReturn("Other title");
         manager.playConfirmRefreshWave(renamedView, station, inv, null);
         server.getScheduler().performOneTick(); server.getScheduler().performTicks(12);

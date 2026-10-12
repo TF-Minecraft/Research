@@ -35,6 +35,8 @@ import net.tfminecraft.research.util.GridLayout;
 import net.tfminecraft.research.util.GuiText;
 import net.tfminecraft.research.util.GuiText.AspectNameStyle;
 import net.tfminecraft.research.util.ItemRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
 
 public final class InventoryManager {
 
@@ -66,7 +68,11 @@ public final class InventoryManager {
     }
 
     public void openMain(Player player, ResearchStation station) {
-        StationMenuHolder holder = new StationMenuHolder(station.getLocation());
+        CharacterSession session = Characters.currentSession(player).orElse(null);
+        if (session == null) {
+            return;
+        }
+        StationMenuHolder holder = new StationMenuHolder(station.getLocation(), session);
         Inventory inventory = Research.plugin.getServer().createInventory(holder, 54, mainInventoryTitle());
         holder.setInventory(inventory);
         populateMain(player, station, inventory);
@@ -235,6 +241,9 @@ public final class InventoryManager {
      */
     public void playConfirmRefreshWave(Player player, ResearchStation station, Inventory inventory,
             String pulseAspectId) {
+        if (!(inventory.getHolder() instanceof StationMenuHolder holder)) {
+            return;
+        }
         List<List<Integer>> rings = buildWaveRings();
         ItemStack pulse = buildWavePulseFiller(pulseAspectId);
         ItemStack leftFiller = buildLeftFiller();
@@ -244,7 +253,7 @@ public final class InventoryManager {
 
             @Override
             public void run() {
-                if (!player.isOnline()) {
+                if (!player.isOnline() || !holder.isCurrent(player)) {
                     cancel();
                     return;
                 }
@@ -361,7 +370,11 @@ public final class InventoryManager {
     }
 
     public void openScrapConfirm(Player player, ResearchStation station) {
-        StationMenuHolder holder = new StationMenuHolder(station.getLocation());
+        CharacterSession session = Characters.currentSession(player).orElse(null);
+        if (session == null) {
+            return;
+        }
+        StationMenuHolder holder = new StationMenuHolder(station.getLocation(), session);
         Inventory inventory = Research.plugin.getServer().createInventory(holder, 9, scrapConfirmTitle());
         holder.setInventory(inventory);
         inventory.setItem(CONFIRM_SCRAP_YES, buildButton(GuiCache.confirmButton, GuiText.label(GuiCache.scrapConfirmYesLabel)));

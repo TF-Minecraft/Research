@@ -13,10 +13,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -24,6 +28,8 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.ServicePriority;
+import org.bukkit.plugin.SimpleServicesManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +49,9 @@ import net.tfminecraft.research.registry.AspectItemRegistry;
 import net.tfminecraft.rpcharacters.RPCharacters;
 import net.tfminecraft.rpcharacters.focus.FocusService;
 import net.tfminecraft.tlibs.TLibs;
+import net.tfminecraft.tlibs.character.CharacterIdentity;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
 import net.tfminecraft.tlibs.objects.api.ItemAPI;
 import net.tfminecraft.tlibs.objects.api.subapi.ItemChecker;
 import net.tfminecraft.tlibs.objects.api.subapi.ItemCreator;
@@ -365,15 +374,41 @@ class ResearchItemsTest {
     }
 
     @Test
-    void activeCharacterIdComesFromRpCharacters() {
+    void activeCharacterIdRequiresAReadySharedSessionEvenWhenRpcHasAnActiveCharacter() {
         PlayerManager manager = new PlayerManager();
         net.tfminecraft.rpcharacters.objects.RPCharacter character =
                 mock(net.tfminecraft.rpcharacters.objects.RPCharacter.class);
-        when(character.getId()).thenReturn("alice");
-        try (MockedStatic<RPCharacters> api = mockStatic(RPCharacters.class)) {
-            assertNull(manager.getActiveCharacterId(player));
+        CharacterIdentity identity = mock(CharacterIdentity.class);
+        when(identity.currentSession(player)).thenReturn(Optional.empty());
+        SimpleServicesManager services = new SimpleServicesManager();
+        Server server = mock(Server.class, RETURNS_DEEP_STUBS);
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+                MockedStatic<RPCharacters> api = mockStatic(RPCharacters.class)) {
+            bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+            bukkit.when(Bukkit::getServer).thenReturn(server);
+            bukkit.when(Bukkit::getServicesManager).thenReturn(services);
             api.when(() -> RPCharacters.getActiveCharacter(player)).thenReturn(character);
-            assertEquals("alice", manager.getActiveCharacterId(player));
+
+            assertNull(manager.getActiveCharacterId(player));
+            services.register(CharacterIdentity.class, identity, Research.plugin, ServicePriority.Normal);
+            assertNull(manager.getActiveCharacterId(player));
+
+            UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            UUID characterId = UUID.fromString("ABCDEF00-0000-0000-0000-000000000002");
+            CharacterSession first = new CharacterSession(new CharacterRef(ownerId, characterId), 1);
+            when(identity.currentSession(player)).thenReturn(Optional.of(first));
+            assertEquals("abcdef00-0000-0000-0000-000000000002", manager.getActiveCharacterId(player));
+
+            when(identity.currentSession(player)).thenReturn(Optional.empty());
+            assertNull(manager.getActiveCharacterId(player));
+            UUID nextId = UUID.fromString("00000000-0000-0000-0000-000000000003");
+            CharacterSession next = new CharacterSession(new CharacterRef(ownerId, nextId), 2);
+            when(identity.currentSession(player)).thenReturn(Optional.of(next));
+            assertEquals(nextId.toString(), manager.getActiveCharacterId(player));
+
+            services.unregister(CharacterIdentity.class, identity);
+            assertNull(manager.getActiveCharacterId(player));
+            api.verify(() -> RPCharacters.getActiveCharacter(player), never());
         }
     }
 

@@ -67,7 +67,7 @@ class ResearchRefundTest {
         when(view.getTitle()).thenReturn("Research Station");
         when(view.getTopInventory()).thenReturn(top);
         when(view.getPlayer()).thenReturn(owner);
-        when(top.getHolder()).thenReturn(new StationMenuHolder(location));
+        when(top.getHolder()).thenReturn(new StationMenuHolder(location, null));
         when(top.getItem(GridLayout.SLOT_EXPERIMENT)).thenAnswer(call -> slot.get());
         doAnswer(call -> {
             slot.set(call.getArgument(1));
