@@ -30,9 +30,17 @@ public class Research extends JavaPlugin {
     private final CommandManager commandManager = new CommandManager();
     private final PlayerManager playerManager = new PlayerManager();
     private final ResearchManager researchManager = new ResearchManager(playerManager);
+    private boolean started;
 
     @Override
     public void onEnable() {
+        try {
+            net.tfminecraft.tlibs.character.Characters.available();
+        } catch (LinkageError error) {
+            getLogger().severe("Research requires TLibs 2.3.0 or newer. Update TLibs and restart the server.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         plugin = this;
         createFolders();
         createConfigs();
@@ -43,12 +51,15 @@ public class Research extends JavaPlugin {
         getCommand("research").setTabCompleter(commandManager);
         getServer().getPluginManager().registerEvents(researchManager, this);
         researchManager.start();
+        started = true;
         getLogger().info("Research enabled.");
     }
 
     @Override
     public void onDisable() {
-        researchManager.unloadAll();
+        if (started) {
+            researchManager.unloadAll();
+        }
         getLogger().info("Research disabled.");
     }
 

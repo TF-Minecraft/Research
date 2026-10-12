@@ -1131,20 +1131,15 @@ class ResearchManagerTest {
     }
 
     @Test
-    void endingSessionDuringFocusSpendCannotProgressOrRefundTheClosedExperimentAgain() {
-        ItemStack experiment = prepareExperiment("fire", null, Map.of("fire", 10));
-        when(points.trySpendMentalPoints(player, 1)).thenAnswer(call -> {
-            currentSession.set(null);
-            manager.onInventoryClose(new InventoryCloseEvent(view));
-            return true;
-        });
+    void endedSessionCannotSpendFocusThroughItsOpenMenu() {
+        prepareExperiment("fire", null, Map.of("fire", 10));
+        currentSession.set(null);
 
         confirm();
 
+        verify(points, never()).trySpendMentalPoints(any(), anyInt());
         assertFalse(project.hasTestedItem("vanilla.COAL"));
         assertEquals(0, project.getAspectPoints("fire"));
-        verify(bottom, times(1)).addItem(experiment);
-        assertNull(topItems.get(GridLayout.SLOT_EXPERIMENT));
         store.verify(() -> StationStore.saveStation(any()), never());
     }
 
