@@ -4,6 +4,9 @@ import net.tfminecraft.research.Cache;
 import net.tfminecraft.research.Messages;
 import net.tfminecraft.research.Research;
 import net.tfminecraft.research.ResearchTestState;
+import net.tfminecraft.tlibs.character.CharacterIdentity;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -12,6 +15,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +26,8 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
@@ -38,6 +44,8 @@ class ResearchEffectsTest {
     private Item entity;
     private Location block;
     private Logger logger;
+    private CharacterIdentity identity;
+    private CharacterSession session;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -54,6 +62,15 @@ class ResearchEffectsTest {
         player = mock(Player.class);
         when(player.getLocation()).thenReturn(block);
         when(player.isOnline()).thenReturn(true);
+        UUID ownerId = UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(ownerId);
+        session = new CharacterSession(new CharacterRef(ownerId, UUID.randomUUID()), 1);
+        identity = mock(CharacterIdentity.class);
+        when(identity.currentSession(player)).thenAnswer(call -> Optional.ofNullable(session));
+        when(identity.isCurrent(any())).thenAnswer(call ->
+                player.isOnline() && call.getArgument(0).equals(session));
+        server.getServicesManager().register(CharacterIdentity.class, identity, Research.plugin,
+                ServicePriority.Normal);
         entity = mock(Item.class);
         when(entity.isValid()).thenReturn(true);
         when(entity.getLocation()).thenAnswer(call -> block.clone().add(0.5, 1.0, 0.5));
@@ -254,10 +271,75 @@ class ResearchEffectsTest {
     void completionDoesNotPlayDelayedEffectsForPlayersWhoLoggedOut() {
         Cache.stationCompleteExtraSoundDelayTicks = 1;
         Cache.stationCompleteExtraSound = "test.extra";
+        Cache.stationCompleteExtraParticle = "CRIT";
         StationCompleteEffects.play(player, block);
+        clearInvocations(world);
         when(player.isOnline()).thenReturn(false);
         server.getScheduler().performTicks(2);
         verify(player, never()).playSound(any(Location.class), eq("minecraft:test.extra"), anyFloat(), anyFloat());
+        verifyNoInteractions(world);
+    }
+
+    @Test
+    void completionSoundRejectsSwitchingAwayAndBackButKeepsStationParticles() {
+        configureDelayedCompletion();
+        CharacterSession original = session;
+        StationCompleteEffects.play(player, block);
+        clearInvocations(world);
+        session = new CharacterSession(new CharacterRef(player.getUniqueId(), UUID.randomUUID()), 2);
+        session = new CharacterSession(original.ref(), 3);
+        server.getScheduler().performTicks(2);
+        verify(player, never()).playSound(any(Location.class), eq("minecraft:test.extra"), anyFloat(), anyFloat());
+        verify(identity).isCurrent(original);
+        verifyDelayedStationParticles();
+    }
+
+    @Test
+    void completionSoundRejectsProviderRemovalButKeepsStationParticles() {
+        configureDelayedCompletion();
+        StationCompleteEffects.play(player, block);
+        clearInvocations(world);
+        server.getServicesManager().unregister(CharacterIdentity.class, identity);
+        server.getScheduler().performTicks(2);
+        verify(player, never()).playSound(any(Location.class), eq("minecraft:test.extra"), anyFloat(), anyFloat());
+        verify(identity, never()).isCurrent(any());
+        verifyDelayedStationParticles();
+    }
+
+    @Test
+    void completionWithoutReadySessionCannotGainSoundWhenCharacterBecomesReady() {
+        configureDelayedCompletion();
+        CharacterSession ready = session;
+        session = null;
+        StationCompleteEffects.play(player, block);
+        session = ready;
+        server.getScheduler().performTicks(2);
+        verify(player, never()).playSound(any(Location.class), eq("minecraft:test.extra"), anyFloat(), anyFloat());
+        verify(identity, never()).isCurrent(any());
+    }
+
+    @Test
+    void completionWithoutProviderCannotGainSoundWhenProviderAppears() {
+        configureDelayedCompletion();
+        server.getServicesManager().unregister(CharacterIdentity.class, identity);
+        StationCompleteEffects.play(player, block);
+        server.getServicesManager().register(CharacterIdentity.class, identity, Research.plugin,
+                ServicePriority.Normal);
+        server.getScheduler().performTicks(2);
+        verify(player, never()).playSound(any(Location.class), eq("minecraft:test.extra"), anyFloat(), anyFloat());
+        verify(identity, never()).isCurrent(any());
+    }
+
+    private void configureDelayedCompletion() {
+        Cache.stationCompleteExtraSoundDelayTicks = 1;
+        Cache.stationCompleteExtraSound = "test.extra";
+        Cache.stationCompleteExtraParticle = "CRIT";
+        Cache.stationCompleteExtraParticleCount = 2;
+        Cache.stationCompleteExtraParticleRadius = 0.2;
+    }
+
+    private void verifyDelayedStationParticles() {
+        verify(world).spawnParticle(Particle.CRIT, block.clone().add(0.5, 1, 0.5), 2, 0.2, 0.7, 0.2, 0.02);
     }
 
     @Test

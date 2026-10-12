@@ -9,6 +9,7 @@ mental_points:
   display: "#7a706aMental Points: #d1b43f{amount}"
 
 station:
+  character_required: "#c45749Your character is not ready to research yet."
   in_use: "#c45749This station is in use by someone else."
   started: "#b8ae61Started research project."
   hold_start_item: "#c45749Hold a research paper in your hand to use this station."

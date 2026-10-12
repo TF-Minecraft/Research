@@ -15,6 +15,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -97,6 +100,8 @@ class ResearchManagerTest {
     private Map<Integer, ItemStack> bottomItems;
     private ResearchStation station;
     private ActiveProject project;
+    private CharacterSession session;
+    private AtomicReference<CharacterSession> currentSession;
     private PlayerManager points;
     private ResearchManager manager;
     private InventoryManager menus;
@@ -146,6 +151,8 @@ class ResearchManagerTest {
         when(world.getName()).thenReturn("world");
         location = new Location(world, 10, 64, 20);
         owner = UUID.randomUUID();
+        session = new CharacterSession(new CharacterRef(owner, UUID.randomUUID()), 1);
+        currentSession = new AtomicReference<>(session);
         player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(owner);
         when(player.getName()).thenReturn("Researcher");
@@ -165,7 +172,7 @@ class ResearchManagerTest {
         when(view.getTopInventory()).thenReturn(top);
         when(view.getBottomInventory()).thenReturn(bottom);
         when(top.getSize()).thenReturn(54);
-        when(top.getHolder()).thenReturn(new StationMenuHolder(location));
+        when(top.getHolder()).thenReturn(new StationMenuHolder(location, session));
         when(top.getItem(anyInt())).thenAnswer(call -> topItems.get(call.getArgument(0)));
         doAnswer(call -> { topItems.put(call.getArgument(0), call.getArgument(1)); return null; })
                 .when(top).setItem(anyInt(), nullable(ItemStack.class));
@@ -193,6 +200,9 @@ class ResearchManagerTest {
         project = new ActiveProject("input", "output", "vanilla.DIAMOND");
         station = new ResearchStation(location, owner, project);
         points = mock(PlayerManager.class);
+        when(points.getActiveCharacterId(player)).thenReturn("alice");
+        MockedStatic<Characters> characters = scoped(mockStatic(Characters.class));
+        characters.when(() -> Characters.isCurrent(any())).thenAnswer(call -> call.getArgument(0).equals(currentSession.get()));
         when(points.trySpendMentalPoints(player, 1)).thenReturn(true);
 
         store = scoped(mockStatic(StationStore.class));
@@ -383,6 +393,7 @@ class ResearchManagerTest {
 
     @Test
     void olderStationsBelongToTheNextCharacterToOpenThem() {
+        when(points.getActiveCharacterId(player)).thenReturn(null);
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
         assertNull(station.getOwnerCharacterId());
         store.verify(() -> StationStore.saveStation(any()), never());
@@ -394,7 +405,7 @@ class ResearchManagerTest {
 
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
         store.verify(() -> StationStore.saveStation(station), times(1));
-        verify(menus, times(3)).openMain(player, station);
+        verify(menus, times(2)).openMain(player, station);
     }
 
     @ParameterizedTest
@@ -592,7 +603,7 @@ class ResearchManagerTest {
 
     @Test
     void breakingOneStationDoesNotCloseAnotherStationsMenu() {
-        when(top.getHolder()).thenReturn(new StationMenuHolder(location.clone().add(10, 0, 0)));
+        when(top.getHolder()).thenReturn(new StationMenuHolder(location.clone().add(10, 0, 0), session));
         manager.onStationBreak(new BlockBreakEvent(lectern, player));
         verify(player, never()).closeInventory();
         assertNull(manager.getStationAt(location));
@@ -627,12 +638,13 @@ class ResearchManagerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"other-title", "not-player", "no-holder", "missing-station", "other-owner"})
+    @ValueSource(strings = {"other-title", "not-player", "no-holder", "no-location", "missing-station", "other-owner"})
     void invalidMenuClicksCannotActOnStations(String problem) {
         if (problem.equals("other-title")) title.set("Other");
         if (problem.equals("not-player")) when(view.getPlayer()).thenReturn(mock(HumanEntity.class));
         if (problem.equals("no-holder")) when(top.getHolder()).thenReturn(null);
-        if (problem.equals("missing-station")) when(top.getHolder()).thenReturn(new StationMenuHolder(location.clone().add(1, 0, 0)));
+        if (problem.equals("no-location")) when(top.getHolder()).thenReturn(new StationMenuHolder(null, session));
+        if (problem.equals("missing-station")) when(top.getHolder()).thenReturn(new StationMenuHolder(location.clone().add(1, 0, 0), session));
         if (problem.equals("other-owner")) station.setOwnerUuid(UUID.randomUUID());
         topItems.put(GridLayout.SLOT_SCRAP, stack(Material.PAPER, 1));
 
@@ -933,7 +945,7 @@ class ResearchManagerTest {
         confirm();
 
         verify(player).sendMessage("experiment.only_rejected");
-        verifyNoInteractions(points);
+        verify(points, never()).trySpendMentalPoints(any(), anyInt());
     }
 
     @ParameterizedTest
@@ -1096,6 +1108,70 @@ class ResearchManagerTest {
         store.verify(() -> StationStore.deleteStation(location));
         store.verify(() -> StationStore.saveStation(any()), never());
         verify(menus, never()).populateMain(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void overflowRefundCannotDuplicateWhenTheDropSwitchesCharacters(boolean confirms) {
+        ItemStack experiment = prepareExperiment("fire", null, Map.of("fire", 10));
+        when(bottom.addItem(any(ItemStack.class))).thenAnswer(call -> new HashMap<>(Map.of(0, call.getArgument(0))));
+        when(world.dropItemNaturally(eq(location), any(ItemStack.class))).thenAnswer(call -> {
+            currentSession.set(null);
+            manager.onInventoryClose(new InventoryCloseEvent(view));
+            return mock(org.bukkit.entity.Item.class);
+        });
+
+        if (confirms) confirm();
+        else manager.onInventoryClick(click(GridLayout.SLOT_EXPERIMENT));
+
+        verify(bottom, times(1)).addItem(any(ItemStack.class));
+        verify(world, times(1)).dropItemNaturally(eq(location), any(ItemStack.class));
+        assertNull(topItems.get(GridLayout.SLOT_EXPERIMENT));
+        assertEquals(Material.COAL, experiment.getType());
+    }
+
+    @Test
+    void endingSessionDuringFocusSpendCannotProgressOrRefundTheClosedExperimentAgain() {
+        ItemStack experiment = prepareExperiment("fire", null, Map.of("fire", 10));
+        when(points.trySpendMentalPoints(player, 1)).thenAnswer(call -> {
+            currentSession.set(null);
+            manager.onInventoryClose(new InventoryCloseEvent(view));
+            return true;
+        });
+
+        confirm();
+
+        assertFalse(project.hasTestedItem("vanilla.COAL"));
+        assertEquals(0, project.getAspectPoints("fire"));
+        verify(bottom, times(1)).addItem(experiment);
+        assertNull(topItems.get(GridLayout.SLOT_EXPERIMENT));
+        store.verify(() -> StationStore.saveStation(any()), never());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void completionListenerCannotCloseAReplacementMenu(boolean switchesCharacter) {
+        prepareExperiment("fire", null, Map.of("fire", 2));
+        ItemStack reward = stack(Material.DIAMOND, 1);
+        items.when(() -> ItemRef.build("vanilla.DIAMOND")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+        Inventory replacement = mock(Inventory.class);
+        InventoryView replacementView = mock(InventoryView.class);
+        when(replacementView.getTopInventory()).thenReturn(replacement);
+        doAnswer(call -> {
+            if (switchesCharacter) currentSession.set(new CharacterSession(session.ref(), 3));
+            when(player.getOpenInventory()).thenReturn(replacementView);
+            return null;
+        }).when(pluginManager).callEvent(any(ResearchCompleteEvent.class));
+
+        confirm();
+
+        assertTrue(project.isCompleted());
+        assertNull(manager.getStationAt(location));
+        verify(player, never()).closeInventory();
+        verifyNoInteractions(replacement);
+        rewards.verify(() -> ResultSpawnEffects.spawnAtStation(location, reward), times(1));
+        completeEffects.verify(() -> StationCompleteEffects.play(player, location), times(switchesCharacter ? 0 : 1));
     }
 
     private ItemStack prepareExperiment(String primary, String secondary, Map<String, Integer> recipe) {

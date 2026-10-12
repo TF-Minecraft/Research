@@ -9,6 +9,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import net.tfminecraft.research.Cache;
 import net.tfminecraft.research.Research;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
 
 public final class StationCompleteEffects {
 
@@ -29,14 +31,17 @@ public final class StationCompleteEffects {
             return;
         }
 
+        CharacterSession session = Characters.currentSession(player).orElse(null);
         new BukkitRunnable() {
             @Override
             public void run() {
                 if (!player.isOnline()) {
                     return;
                 }
-                SoundKeys.play(player, Cache.stationCompleteExtraSound,
-                        Cache.stationCompleteExtraSoundVolume, Cache.stationCompleteExtraSoundPitch);
+                if (session != null && Characters.isCurrent(session)) {
+                    SoundKeys.play(player, Cache.stationCompleteExtraSound,
+                            Cache.stationCompleteExtraSoundVolume, Cache.stationCompleteExtraSoundPitch);
+                }
                 spawnBurst(center, Cache.stationCompleteExtraParticle, Cache.stationCompleteExtraParticleCount,
                         Cache.stationCompleteExtraParticleRadius);
             }

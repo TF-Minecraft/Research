@@ -54,6 +54,7 @@ import net.tfminecraft.research.util.RevealHelper;
 import net.tfminecraft.research.util.SoundKeys;
 import net.tfminecraft.research.util.StationCompleteEffects;
 import net.tfminecraft.research.util.StationStartEffects;
+import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
 
 public final class ResearchManager implements Listener {
 
@@ -80,6 +81,13 @@ public final class ResearchManager implements Listener {
     }
 
     public void unloadAll() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            InventoryView view = player.getOpenInventory();
+            if (view.getTopInventory().getHolder() instanceof StationMenuHolder) {
+                refundExperiment(player, view);
+                player.closeInventory();
+            }
+        }
         StationStore.saveAll(stations);
         stations.clear();
     }
@@ -118,6 +126,12 @@ public final class ResearchManager implements Listener {
         }
 
         event.setCancelled(true);
+
+        if (playerManager.getActiveCharacterId(player) == null) {
+            player.sendMessage(Messages.has("station.character_required")
+                    ? Messages.get("station.character_required") : "Your character is not ready to research yet.");
+            return;
+        }
 
         if (station != null) {
             if (!isOwnedBy(station, player)) {
@@ -235,17 +249,30 @@ public final class ResearchManager implements Listener {
         if (!(event.getPlayer() instanceof Player player)) {
             return;
         }
-        if (!event.getView().getTitle().equals(InventoryManager.mainInventoryTitle())) {
+        refundExperiment(player, event.getView());
+    }
+
+    private void refundExperiment(Player player, InventoryView view) {
+        if (!view.getTitle().equals(InventoryManager.mainInventoryTitle())) {
             return;
         }
-        if (!(event.getView().getTopInventory().getHolder() instanceof StationMenuHolder)) {
+        if (!(view.getTopInventory().getHolder() instanceof StationMenuHolder)) {
             return;
         }
 
-        ItemStack experiment = event.getView().getTopInventory().getItem(GridLayout.SLOT_EXPERIMENT);
+        ItemStack experiment = view.getTopInventory().getItem(GridLayout.SLOT_EXPERIMENT);
         if (experiment != null && experiment.getType() != Material.AIR) {
-            event.getView().getTopInventory().setItem(GridLayout.SLOT_EXPERIMENT, null);
+            view.getTopInventory().setItem(GridLayout.SLOT_EXPERIMENT, null);
             returnItemToPlayer(player, experiment);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onCharacterSessionEnd(CharacterSessionEndEvent event) {
+        Player player = event.getPlayer();
+        if (player.getOpenInventory().getTopInventory().getHolder() instanceof StationMenuHolder holder
+                && event.getSession().equals(holder.getSession())) {
+            player.closeInventory();
         }
     }
 
@@ -262,8 +289,8 @@ public final class ResearchManager implements Listener {
         if (inSlot == null || inSlot.getType() == Material.AIR) {
             return;
         }
-        returnItemToPlayer(player, inSlot);
         top.setItem(GridLayout.SLOT_EXPERIMENT, null);
+        returnItemToPlayer(player, inSlot);
         inventoryManager.updateExperimentPreview(top, null, station.getProject());
     }
 
@@ -356,6 +383,10 @@ public final class ResearchManager implements Listener {
             return;
         }
 
+        if (!((StationMenuHolder) inventory.getHolder()).isCurrent(player)) {
+            return;
+        }
+
         project.markTested(match.getItemRef());
         boolean primaryScored = applyExperimentAspect(player, project, outputDef, match.getPrimaryAspect(),
                 ExternalModifiers.adjustExperimentPoints(player, match.getPrimaryPoints()));
@@ -364,8 +395,8 @@ public final class ResearchManager implements Listener {
 
         playExperimentConfirmSound(player, match);
         inventoryManager.updateExperimentPreview(inventory, experimentItem, project);
-        returnItemToPlayer(player, experimentItem.clone());
         inventory.setItem(GridLayout.SLOT_EXPERIMENT, null);
+        returnItemToPlayer(player, experimentItem.clone());
         inventoryManager.updateExperimentPreview(inventory, null, project);
 
         if (checkProjectCompletion(player, station, outputDef, inventory)) {
@@ -528,11 +559,15 @@ public final class ResearchManager implements Listener {
      */
     private void finishCompletedStation(Player player, ResearchStation station, Inventory inventory) {
         Location loc = blockLocation(station.getLocation());
-        StationCompleteEffects.play(player, loc);
         stations.remove(station);
         StationStore.deleteStation(loc);
         inventory.clear();
-        player.closeInventory();
+        if (((StationMenuHolder) inventory.getHolder()).isCurrent(player)) {
+            StationCompleteEffects.play(player, loc);
+            if (player.getOpenInventory().getTopInventory().equals(inventory)) {
+                player.closeInventory();
+            }
+        }
     }
 
     private void sendResultGrantedMessage(Player player, ItemStack item) {
@@ -648,6 +683,10 @@ public final class ResearchManager implements Listener {
      * so a player with several stations only ever acts on the one whose menu is open.
      */
     private ResearchStation resolveStationForMenu(Player player, InventoryView view) {
+        if (!(view.getTopInventory().getHolder() instanceof StationMenuHolder holder)
+                || !holder.isCurrent(player)) {
+            return null;
+        }
         Location menuLoc = menuStationLocation(view);
         if (menuLoc == null) {
             return null;
@@ -668,7 +707,9 @@ public final class ResearchManager implements Listener {
             return false;
         }
         String ownerCharacterId = station.getOwnerCharacterId();
-        return ownerCharacterId == null || ownerCharacterId.equals(playerManager.getActiveCharacterId(player));
+        String activeCharacterId = playerManager.getActiveCharacterId(player);
+        return activeCharacterId != null
+                && (ownerCharacterId == null || ownerCharacterId.equalsIgnoreCase(activeCharacterId));
     }
 
     /** Stations saved before characters were recorded belong to the next character to open them. */

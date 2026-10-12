@@ -8,6 +8,9 @@ import static org.mockito.Mockito.*;
 import java.util.List;
 import java.util.UUID;
 
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.CharacterSession;
+import net.tfminecraft.tlibs.character.Characters;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -32,6 +35,7 @@ class MultipleStationsTest {
     void scrapConfirmActsOnTheStationWhoseMenuIsOpen() {
         UUID ownerId = UUID.randomUUID();
         Player owner = mock(Player.class);
+        CharacterSession session = new CharacterSession(new CharacterRef(ownerId, UUID.randomUUID()), 1);
         World world = mock(World.class);
         Location first = new Location(world, 10, 64, 10);
         Location second = new Location(world, 20, 64, 20);
@@ -48,9 +52,10 @@ class MultipleStationsTest {
         when(view.getPlayer()).thenReturn(owner);
         when(view.convertSlot(InventoryManager.CONFIRM_SCRAP_YES)).thenReturn(InventoryManager.CONFIRM_SCRAP_YES);
         when(view.getItem(InventoryManager.CONFIRM_SCRAP_YES)).thenReturn(mock(ItemStack.class));
-        when(top.getHolder()).thenReturn(new StationMenuHolder(second));
+        when(top.getHolder()).thenReturn(new StationMenuHolder(second, session));
 
-        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
+        try (MockedStatic<Characters> characters = mockStatic(Characters.class);
+                MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class);
                 MockedStatic<StationStore> store = mockStatic(StationStore.class);
                 MockedStatic<InventoryManager> menus = mockStatic(InventoryManager.class);
                 MockedStatic<Messages> messages = mockStatic(Messages.class)) {
@@ -58,7 +63,10 @@ class MultipleStationsTest {
             store.when(StationStore::loadAll).thenReturn(List.of(firstStation, secondStation));
             menus.when(InventoryManager::mainInventoryTitle).thenReturn("Research Station");
             menus.when(InventoryManager::scrapConfirmTitle).thenReturn("Confirm Scrap");
-            ResearchManager manager = new ResearchManager(null);
+            characters.when(() -> Characters.isCurrent(session)).thenReturn(true);
+            PlayerManager points = mock(PlayerManager.class);
+            when(points.getActiveCharacterId(owner)).thenReturn(session.ref().characterId().toString());
+            ResearchManager manager = new ResearchManager(points);
             manager.start();
 
             InventoryClickEvent click = new InventoryClickEvent(view, SlotType.CONTAINER,
