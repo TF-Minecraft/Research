@@ -199,6 +199,7 @@ class ResearchManagerTest {
         when(lectern.getLocation()).thenReturn(location);
         project = new ActiveProject("input", "output", "vanilla.DIAMOND");
         station = new ResearchStation(location, owner, project);
+        station.setOwnerCharacterId("alice");
         points = mock(PlayerManager.class);
         when(points.getActiveCharacterId(player)).thenReturn("alice");
         MockedStatic<Characters> characters = scoped(mockStatic(Characters.class));
@@ -391,21 +392,33 @@ class ResearchManagerTest {
         assertEquals(2, project.getAspectPoints("fire"));
     }
 
-    @Test
-    void olderStationsBelongToTheNextCharacterToOpenThem() {
+    @ParameterizedTest
+    @ValueSource(strings = {"alice", "bob"})
+    void unassignedStationsCannotBeClaimedByAnActiveCharacter(String character) {
+        station.setOwnerCharacterId(null);
         when(points.getActiveCharacterId(player)).thenReturn(null);
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
         assertNull(station.getOwnerCharacterId());
         store.verify(() -> StationStore.saveStation(any()), never());
 
-        when(points.getActiveCharacterId(player)).thenReturn("alice");
+        when(points.getActiveCharacterId(player)).thenReturn(character);
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
-        assertEquals("alice", station.getOwnerCharacterId());
-        store.verify(() -> StationStore.saveStation(station));
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        assertNull(station.getOwnerCharacterId());
+        store.verify(() -> StationStore.saveStation(any()), never());
+        verifyNoInteractions(menus);
+    }
 
-        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
-        store.verify(() -> StationStore.saveStation(station), times(1));
-        verify(menus, times(2)).openMain(player, station);
+    @Test
+    void unassignedStationCannotSpendFocusThroughAnAlreadyOpenMenu() {
+        station.setOwnerCharacterId(null);
+        prepareExperiment("fire", "water", Map.of("fire", 10, "water", 10));
+
+        confirm();
+
+        verify(points, never()).trySpendMentalPoints(any(), anyInt());
+        assertEquals(0, project.getAspectPoints("fire"));
+        store.verify(() -> StationStore.saveStation(any()), never());
     }
 
     @ParameterizedTest

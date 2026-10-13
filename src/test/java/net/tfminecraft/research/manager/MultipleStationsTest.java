@@ -41,6 +41,8 @@ class MultipleStationsTest {
         Location second = new Location(world, 20, 64, 20);
         ResearchStation firstStation = new ResearchStation(first, ownerId, null);
         ResearchStation secondStation = new ResearchStation(second, ownerId, null);
+        firstStation.setOwnerCharacterId(session.ref().characterId().toString());
+        secondStation.setOwnerCharacterId(session.ref().characterId().toString());
 
         Inventory top = mock(Inventory.class);
         InventoryView view = mock(InventoryView.class);

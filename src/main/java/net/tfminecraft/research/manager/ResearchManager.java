@@ -173,7 +173,6 @@ public final class ResearchManager implements Listener {
                 player.sendMessage(Messages.get("station.in_use"));
                 return;
             }
-            claimForActiveCharacter(station, player);
             openMainGui(player, station);
             return;
         }
@@ -739,20 +738,8 @@ public final class ResearchManager implements Listener {
         }
         String ownerCharacterId = station.getOwnerCharacterId();
         String activeCharacterId = playerManager.getActiveCharacterId(player);
-        return activeCharacterId != null
-                && (ownerCharacterId == null || ownerCharacterId.equalsIgnoreCase(activeCharacterId));
-    }
-
-    /** Stations saved before characters were recorded belong to the next character to open them. */
-    private void claimForActiveCharacter(ResearchStation station, Player player) {
-        if (station.getOwnerCharacterId() != null) {
-            return;
-        }
-        String characterId = playerManager.getActiveCharacterId(player);
-        if (characterId != null) {
-            station.setOwnerCharacterId(characterId);
-            StationStore.saveStation(station);
-        }
+        return ownerCharacterId != null && activeCharacterId != null
+                && ownerCharacterId.equalsIgnoreCase(activeCharacterId);
     }
 
     private boolean isMenuFor(InventoryView view, ResearchStation station) {
