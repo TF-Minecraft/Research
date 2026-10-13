@@ -93,21 +93,31 @@ public final class StationEstate implements EstateParticipant {
     /** Settles every decided estate whose guard holds and reports outcomes that changed. */
     void reconcile() {
         for (EstateDecision decision : decided.get()) {
-            if (!guard.test(decision)) {
-                continue;
-            }
-            Outcome outcome = settle(decision);
-            Map.Entry<Long, Outcome> last = Map.entry(decision.revision(), outcome);
-            if (!last.equals(reported.get(decision.deathId()))
-                    && reporter.report(decision.deathId(), ID, decision.revision(), outcome)) {
-                reported.put(decision.deathId(), last);
+            // One estate failing must not stop the others until the next hour.
+            try {
+                if (!guard.test(decision)) {
+                    continue;
+                }
+                Outcome outcome = settle(decision);
+                Map.Entry<Long, Outcome> last = Map.entry(decision.revision(), outcome);
+                if (!last.equals(reported.get(decision.deathId()))
+                        && reporter.report(decision.deathId(), ID, decision.revision(), outcome)) {
+                    reported.put(decision.deathId(), last);
+                }
+            } catch (RuntimeException ex) {
+                logger.warning("Could not reconcile the research stations of estate " + decision.deathId() + ": " + ex);
             }
         }
     }
 
     private static String label(ResearchStation station) {
+        // Describe feeds the will screen, so a station without its world or project must not throw.
         Location location = station.getLocation();
-        return "Research station at " + location.getWorld().getName() + " " + location.getBlockX() + ", "
-                + location.getBlockY() + ", " + location.getBlockZ() + " (" + station.getProject().getInputId() + ")";
+        String place = location != null && location.isWorldLoaded()
+                ? location.getWorld().getName() + " " + location.getBlockX() + ", " + location.getBlockY() + ", "
+                        + location.getBlockZ()
+                : "an unloaded world";
+        return "Research station at " + place
+                + (station.getProject() == null ? "" : " (" + station.getProject().getInputId() + ")");
     }
 }

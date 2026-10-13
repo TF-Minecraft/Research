@@ -97,6 +97,10 @@ final class StationTransfers {
             if (journal == null || journal.stations() == null) {
                 throw new IOException("Incomplete estate journal " + file);
             }
+            // A journal copied from another death must not add its stations to this estate.
+            if (!deathId.toString().equals(journal.deathId()) || !testator.toString().equals(journal.testator())) {
+                throw new IOException("Estate journal " + file + " belongs to another death");
+            }
             return new Journal(journal.deathId(), journal.testator(), new LinkedHashMap<>(journal.stations()));
         } catch (JsonParseException ex) {
             throw new IOException("Unreadable estate journal " + file, ex);

@@ -218,6 +218,63 @@ class StationEstateTest {
     }
 
     @Test
+    void describeCopesWithAStationWithoutItsWorldOrProject() {
+        ResearchManager stations = mock(ResearchManager.class);
+        Location unloaded = mock(Location.class);
+        when(unloaded.isWorldLoaded()).thenReturn(false);
+        ResearchStation noWorld = new ResearchStation(unloaded, TESTATOR.ownerId(),
+                new ActiveProject("input", "output", "minecraft:diamond", false));
+        ResearchStation noProject = new ResearchStation(new Location(world, 4, 64, 0), TESTATOR.ownerId(), null);
+        ResearchStation nowhere = new ResearchStation(null, TESTATOR.ownerId(), null);
+        when(stations.stationsOwnedBy(TESTATOR.characterId().toString())).thenReturn(List.of(noWorld, noProject, nowhere));
+        StationEstate described = new StationEstate(stations, new StationTransfers(stations, journals()),
+                Logger.getAnonymousLogger());
+
+        assertEquals(List.of("Research station at an unloaded world", "Research station at an unloaded world (input)",
+                "Research station at world 4, 64, 0"), described.describe(TESTATOR.characterId()).labels());
+    }
+
+    @Test
+    void aJournalFromAnotherDeathIsRefused() throws Exception {
+        save(TESTATOR, 1);
+        save(OTHER, 2);
+        manager.start();
+        StationTransfers.Entry planned = planned();
+        Files.createDirectories(journals());
+        Files.writeString(journals().resolve(DEATH + ".json"), new Gson().toJson(new StationTransfers.Journal(
+                UUID.randomUUID().toString(), TESTATOR.characterId().toString(), Map.of("world_2_64_0", planned))));
+        assertEquals(Outcome.Kind.RETRY, estate.settle(decision(Recipient.character(HEIR), 0)).kind());
+        Files.writeString(journals().resolve(DEATH + ".json"), new Gson().toJson(new StationTransfers.Journal(
+                DEATH.toString(), OTHER.characterId().toString(), Map.of("world_2_64_0", planned))));
+        assertEquals(Outcome.Kind.RETRY, estate.settle(decision(Recipient.character(HEIR), 0)).kind());
+        assertOwner("world_1_64_0", TESTATOR);
+        assertOwner("world_2_64_0", OTHER);
+    }
+
+    @Test
+    void oneFailingEstateDoesNotStopTheReconcileOfTheOthers() throws Exception {
+        save(TESTATOR, 1);
+        manager.start();
+        EstateDecision broken = new EstateDecision(UUID.randomUUID(), OTHER, Optional.empty(), Instant.EPOCH,
+                Optional.empty(), Optional.empty(), Optional.empty(), Recipient.FROZEN, Recipient.FROZEN,
+                Recipient.FROZEN, Recipient.SENDER, 0);
+        estate.guard = decision -> {
+            if (decision == broken) {
+                throw new IllegalStateException("service failed");
+            }
+            return true;
+        };
+        estate.decided = () -> List.of(broken, decision(Recipient.character(HEIR), 0));
+        List<UUID> reported = new ArrayList<>();
+        estate.reporter = (death, participant, revision, outcome) -> reported.add(death);
+
+        estate.reconcile();
+
+        assertEquals(List.of(DEATH), reported);
+        assertOwner("world_1_64_0", HEIR);
+    }
+
+    @Test
     void reconcileSettlesDecidedEstatesAndReportsOnlyChanges() throws Exception {
         save(TESTATOR, 1);
         save(OTHER, 2);
