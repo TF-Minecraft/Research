@@ -23,6 +23,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockbukkit.mockbukkit.MockBukkit;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import net.tfminecraft.research.Research;
 import net.tfminecraft.research.ResearchTestState;
@@ -40,6 +42,7 @@ class StationBackfillTest {
     private static final CharacterRef HEIR = new CharacterRef(ACCOUNT, UUID.randomUUID());
     private static final UUID NO_HEIR = UUID.randomUUID();
     private static final UUID STRANGER = UUID.randomUUID();
+    private static final String CLAIMED = UUID.randomUUID().toString();
 
     @TempDir Path folder;
     private ResearchTestState globals;
@@ -75,15 +78,47 @@ class StationBackfillTest {
     }
 
     @Test
-    void stationsWithoutACharacterGoToTheAccountsHeirWithABackup() throws Exception {
+    void unloadedStationsGetTheirHeirWithoutChangingRecipeOrExtensionFields() throws Exception {
         save(ACCOUNT, null, 1);
-        save(ACCOUNT, "kept", 2);
+        save(ACCOUNT, null, 2);
+        JsonObject unknownRecipe = JsonParser.parseString(Files.readString(stationFile(1))).getAsJsonObject();
+        unknownRecipe.addProperty("input_id", "retired-input");
+        unknownRecipe.add("extension", JsonParser.parseString("{\"nested\":[1,null,\"kept\"],\"flag\":true}"));
+        Files.writeString(stationFile(1), unknownRecipe.toString());
+        JsonObject missingWorld = JsonParser.parseString(Files.readString(stationFile(2))).getAsJsonObject();
+        missingWorld.addProperty("world", "unloaded_world");
+        Path missingWorldFile = folder.resolve("data/stations/unloaded_world_2_64_0.json");
+        Files.delete(stationFile(2));
+        Files.writeString(missingWorldFile, missingWorld.toString());
         String original = Files.readString(stationFile(1));
+        assertTrue(StationStore.loadAll().isEmpty());
 
         assertTrue(backfill().run(StationStore.loadAll()));
 
+        JsonObject updated = JsonParser.parseString(Files.readString(stationFile(1))).getAsJsonObject();
+        assertEquals(HEIR.characterId().toString(), updated.remove("owner_character_id").getAsString());
+        assertEquals(unknownRecipe, updated);
+        JsonObject updatedWorld = JsonParser.parseString(Files.readString(missingWorldFile)).getAsJsonObject();
+        assertEquals(HEIR.characterId().toString(), updatedWorld.remove("owner_character_id").getAsString());
+        assertEquals(missingWorld, updatedWorld);
+        assertEquals(original, Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
+        assertEquals(2, result().filled());
+        assertTrue(StationStore.loadAll().isEmpty());
+    }
+
+    @Test
+    void stationsWithoutACharacterGoToTheAccountsHeirWithABackup() throws Exception {
+        save(ACCOUNT, null, 1);
+        save(ACCOUNT, CLAIMED, 2);
+        String original = Files.readString(stationFile(1));
+
+        List<ResearchStation> stations = StationStore.loadAll();
+        assertTrue(backfill().run(stations));
+
+        assertEquals(HEIR.characterId().toString(), stations.stream()
+                .filter(station -> station.getLocation().getBlockX() == 1).findFirst().orElseThrow().getOwnerCharacterId());
         assertEquals(HEIR.characterId().toString(), loaded(1).getOwnerCharacterId());
-        assertEquals("kept", loaded(2).getOwnerCharacterId());
+        assertEquals(CLAIMED, loaded(2).getOwnerCharacterId());
         assertEquals(original, Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
         assertFalse(Files.exists(backfillFolder().resolve("backup/world_2_64_0.json")));
         StationBackfill.Result result = result();
@@ -96,7 +131,8 @@ class StationBackfillTest {
         save(NO_HEIR, null, 1);
         save(STRANGER, null, 2);
 
-        assertTrue(backfill().run(StationStore.loadAll()));
+        List<ResearchStation> stations = StationStore.loadAll();
+        assertTrue(backfill().run(stations));
 
         assertNull(loaded(1).getOwnerCharacterId());
         assertNull(loaded(2).getOwnerCharacterId());
@@ -142,21 +178,26 @@ class StationBackfillTest {
         save(ACCOUNT, null, 2);
         save(ACCOUNT, null, 3);
         // The first run wrote its plan, backed up and filled station 1, then the server died.
-        Map<String, String> planned = new java.util.LinkedHashMap<>();
-        planned.put("world_1_64_0", HEIR.characterId().toString());
-        planned.put("world_2_64_0", HEIR.characterId().toString());
-        planned.put("world_3_64_0", null);
+        Map<String, StationBackfill.Destination> planned = new java.util.LinkedHashMap<>();
+        planned.put("world_1_64_0", destination(HEIR.characterId().toString()));
+        planned.put("world_2_64_0", destination(HEIR.characterId().toString()));
+        planned.put("world_3_64_0", destination(null));
         Files.createDirectories(backfillFolder().resolve("backup"));
-        Files.writeString(backfillFolder().resolve("plan.json"), new com.google.gson.GsonBuilder().serializeNulls().create().toJson(new StationBackfill.Plan(planned)));
-        Files.writeString(backfillFolder().resolve("backup/world_1_64_0.json"), "original of station 1");
+        writePlan(planned);
+        String original = Files.readString(stationFile(1));
+        Files.writeString(backfillFolder().resolve("backup/world_1_64_0.json"), original);
+        List<ResearchStation> stations = StationStore.loadAll();
         save(ACCOUNT, HEIR.characterId().toString(), 1);
+        heirs.put(ACCOUNT, new CharacterRef(ACCOUNT, UUID.randomUUID()));
 
-        assertTrue(backfill().run(StationStore.loadAll()));
+        assertTrue(backfill().run(stations));
 
         assertEquals(0, heirLookups);
+        assertEquals(HEIR.characterId().toString(), stations.stream()
+                .filter(station -> station.getLocation().getBlockX() == 1).findFirst().orElseThrow().getOwnerCharacterId());
         assertEquals(HEIR.characterId().toString(), loaded(2).getOwnerCharacterId());
         assertNull(loaded(3).getOwnerCharacterId());
-        assertEquals("original of station 1", Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
+        assertEquals(original, Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
         assertEquals(2, result().filled());
         assertEquals(List.of("world_3_64_0"), result().unresolved());
     }
@@ -166,15 +207,16 @@ class StationBackfillTest {
         save(ACCOUNT, null, 1);
         List<ResearchStation> stations = StationStore.loadAll();
         Path file = stationFile(1);
-        Files.delete(file);
-        Files.createDirectories(file.resolve("blocked"));
-
-        assertFalse(backfill().run(stations));
+        String original = Files.readString(file);
+        try (var writes = mockStatic(DurableFiles.class, CALLS_REAL_METHODS)) {
+            writes.when(() -> DurableFiles.write(eq(file), anyString())).thenThrow(new java.io.IOException("write failed"));
+            assertFalse(backfill().run(stations));
+        }
 
         assertNull(stations.getFirst().getOwnerCharacterId());
+        assertEquals(original, Files.readString(file));
+        assertEquals(original, Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
         assertFalse(Files.exists(backfillFolder().resolve("done.json")));
-        Files.delete(file.resolve("blocked"));
-        Files.delete(file);
         assertTrue(backfill().run(stations));
         assertEquals(HEIR.characterId().toString(), stations.getFirst().getOwnerCharacterId());
     }
@@ -188,7 +230,7 @@ class StationBackfillTest {
         assertFalse(backfill().run(StationStore.loadAll()));
 
         assertNull(loaded(1).getOwnerCharacterId());
-        verify(logger).severe(contains("Could not back up station world_1_64_0"));
+        verify(logger).severe(startsWith("[Research] Station heir backfill failed"));
     }
 
     @Test
@@ -205,15 +247,157 @@ class StationBackfillTest {
 
     @Test
     void plannedStationsThatAreGoneOrClaimedAreNotCounted() throws Exception {
-        save(ACCOUNT, "claimed-by-another", 1);
-        Files.createDirectories(backfillFolder());
-        Files.writeString(backfillFolder().resolve("plan.json"), new Gson().toJson(new StationBackfill.Plan(
-                Map.of("world_1_64_0", HEIR.characterId().toString(), "world_9_64_0", HEIR.characterId().toString()))));
+        save(ACCOUNT, CLAIMED, 1);
+        writePlan(Map.of("world_1_64_0", destination(HEIR.characterId().toString()),
+                "world_9_64_0", destination(HEIR.characterId().toString())));
 
         assertTrue(backfill().run(StationStore.loadAll()));
 
-        assertEquals("claimed-by-another", loaded(1).getOwnerCharacterId());
+        assertEquals(CLAIMED, loaded(1).getOwnerCharacterId());
         assertEquals(0, result().filled());
+        assertEquals(List.of("world_1_64_0", "world_9_64_0"), result().skipped().stream().sorted().toList());
+    }
+
+    @Test
+    void corruptOwnershipMetadataIsPreservedAndListedForStaff() throws Exception {
+        save(ACCOUNT, null, 1);
+        String valid = Files.readString(stationFile(1));
+        Map<String, String> corrupt = new java.util.LinkedHashMap<>();
+        corrupt.put("broken", "{ broken");
+        corrupt.put("null", "null");
+        corrupt.put("array", "[]");
+        corrupt.put("no-owner", valid.replace("owner_uuid", "former_owner_uuid"));
+        corrupt.put("invalid-owner", valid.replace(ACCOUNT.toString(), "not-a-uuid"));
+        corrupt.put("short-owner", valid.replace(ACCOUNT.toString(), "1-1-1-1-1"));
+        corrupt.put("wrong-location", valid.replace("\"x\": 1", "\"x\": 2"));
+        corrupt.put("missing-coordinate", valid.replace("\"x\": 1,", ""));
+        corrupt.put("invalid-coordinate", valid.replace("\"x\": 1", "\"x\": \"1\""));
+        corrupt.put("fractional-coordinate", valid.replace("\"x\": 1", "\"x\": 1.5"));
+        corrupt.put("invalid-world", valid.replace("\"world\": \"world\"", "\"world\": {}"));
+        corrupt.put("blank-world", valid.replace("\"world\": \"world\"", "\"world\": \"\""));
+        // These match their filename so the corrupt character field is the reason they are skipped.
+        JsonObject badCharacter = JsonParser.parseString(valid).getAsJsonObject();
+        badCharacter.addProperty("x", 2);
+        badCharacter.addProperty("owner_character_id", "invalid-character");
+        corrupt.put("world_2_64_0", badCharacter.toString());
+        JsonObject wrongOwnerType = JsonParser.parseString(valid).getAsJsonObject();
+        wrongOwnerType.addProperty("x", 3);
+        wrongOwnerType.addProperty("owner_uuid", 123);
+        corrupt.put("world_3_64_0", wrongOwnerType.toString());
+        Map<String, String> matchingFiles = new java.util.LinkedHashMap<>();
+        for (var entry : corrupt.entrySet()) {
+            String key = entry.getKey().startsWith("world_") ? entry.getKey() : entry.getKey() + "_1_64_0";
+            String contents = entry.getKey().startsWith("world_") ? entry.getValue() : entry.getValue()
+                    .replace("\"world\": \"world\"", "\"world\": \"" + entry.getKey() + "\"");
+            matchingFiles.put(key, contents);
+        }
+        corrupt = matchingFiles;
+        for (var entry : corrupt.entrySet()) {
+            Files.writeString(folder.resolve("data/stations/" + entry.getKey() + ".json"), entry.getValue());
+        }
+        Files.createDirectories(folder.resolve("data/stations/unreadable.json"));
+        Files.writeString(folder.resolve("data/stations/ignored.txt"), "ignored");
+
+        assertTrue(backfill().run(StationStore.loadAll()));
+
+        assertEquals(HEIR.characterId().toString(), loaded(1).getOwnerCharacterId());
+        assertEquals(1, result().filled());
+        List<String> skipped = new java.util.ArrayList<>(corrupt.keySet());
+        skipped.add("unreadable");
+        assertEquals(skipped.stream().sorted().toList(), result().skipped().stream().sorted().toList());
+        for (var entry : corrupt.entrySet()) {
+            assertEquals(entry.getValue(), Files.readString(folder.resolve("data/stations/" + entry.getKey() + ".json")));
+        }
+        verify(logger).warning(contains("staff review:"));
+        assertEquals(List.of(), result().unresolved());
+    }
+
+    @Test
+    void changedAccountsAndInMemoryClaimsAreNotOverwrittenOnReplay() throws Exception {
+        save(NO_HEIR, null, 1);
+        save(ACCOUNT, null, 2);
+        save(ACCOUNT, null, 3);
+        List<ResearchStation> stations = StationStore.loadAll();
+        stations.stream().filter(station -> station.getLocation().getBlockX() == 2)
+                .findFirst().orElseThrow().setOwnerCharacterId(CLAIMED);
+        stations.stream().filter(station -> station.getLocation().getBlockX() == 3)
+                .findFirst().orElseThrow().setOwnerUuid(NO_HEIR);
+        writePlan(Map.of("world_1_64_0", destination(HEIR.characterId().toString()),
+                "world_2_64_0", destination(HEIR.characterId().toString()),
+                "world_3_64_0", destination(HEIR.characterId().toString())));
+
+        assertTrue(backfill().run(stations));
+
+        assertEquals(0, result().filled());
+        assertEquals(List.of("world_1_64_0", "world_2_64_0", "world_3_64_0"), result().skipped().stream().sorted().toList());
+        assertNull(loaded(1).getOwnerCharacterId());
+        assertNull(loaded(2).getOwnerCharacterId());
+        assertNull(loaded(3).getOwnerCharacterId());
+        assertFalse(Files.exists(backfillFolder().resolve("backup")));
+    }
+
+    @Test
+    void aMarkerFailureReplaysTheSameHeirAndKeepsTheOriginalBackup() throws Exception {
+        save(ACCOUNT, null, 1);
+        JsonObject data = JsonParser.parseString(Files.readString(stationFile(1))).getAsJsonObject();
+        data.addProperty("resolved_output_id", "unknown-output");
+        data.add("extension", JsonParser.parseString("[1,2,3]"));
+        data.add("owner_character_id", com.google.gson.JsonNull.INSTANCE);
+        Files.writeString(stationFile(1), data.toString());
+        String original = Files.readString(stationFile(1));
+        Path marker = backfillFolder().resolve("done.json");
+        try (var writes = mockStatic(DurableFiles.class, CALLS_REAL_METHODS)) {
+            writes.when(() -> DurableFiles.write(eq(marker), anyString())).thenThrow(new java.io.IOException("marker failed"));
+            assertFalse(backfill().run(StationStore.loadAll()));
+        }
+        assertFalse(Files.exists(marker));
+        String assigned = Files.readString(stationFile(1));
+        assertEquals(HEIR.characterId().toString(), JsonParser.parseString(assigned).getAsJsonObject()
+                .get("owner_character_id").getAsString());
+        heirs.put(ACCOUNT, new CharacterRef(ACCOUNT, UUID.randomUUID()));
+        heirLookups = 0;
+
+        assertTrue(backfill().run(StationStore.loadAll()));
+
+        assertEquals(0, heirLookups);
+        assertEquals(assigned, Files.readString(stationFile(1)));
+        assertEquals(original, Files.readString(backfillFolder().resolve("backup/world_1_64_0.json")));
+        assertEquals(1, result().filled());
+    }
+
+    @Test
+    void anInterruptedPlanWhoseStationBecomesUnreadableWaitsForRepair() throws Exception {
+        save(ACCOUNT, null, 1);
+        String original = Files.readString(stationFile(1));
+        writePlan(Map.of("world_1_64_0", destination(HEIR.characterId().toString())));
+        Files.writeString(stationFile(1), "{ broken");
+
+        assertFalse(backfill().run(List.of()));
+
+        assertFalse(Files.exists(backfillFolder().resolve("done.json")));
+        verify(logger).severe(contains("Could not read planned station world_1_64_0"));
+        Files.writeString(stationFile(1), original);
+        assertTrue(backfill().run(StationStore.loadAll()));
+        assertEquals(0, heirLookups);
+        assertEquals(1, result().filled());
+    }
+
+    @Test
+    void incompleteUnsafeOrLegacyPlansAreRefusedWithoutReplanning() throws Exception {
+        save(ACCOUNT, null, 1);
+        Files.createDirectories(backfillFolder());
+        List<String> invalidPlans = List.of("null", "{\"stations\":{}}", "{\"stations\":{\"world_1_64_0\":null},\"skipped\":[]}",
+                "{\"stations\":{\"world_1_64_0\":{\"characterId\":\"" + HEIR.characterId() + "\"}},\"skipped\":[]}",
+                "{\"stations\":{\"world_1_64_0\":\"" + HEIR.characterId() + "\"}}",
+                "{\"stations\":{\"../outside\":{\"ownerUuid\":\"" + ACCOUNT + "\"}},\"skipped\":[]}");
+        for (String plan : invalidPlans) {
+            Files.writeString(backfillFolder().resolve("plan.json"), plan);
+            assertFalse(backfill().run(StationStore.loadAll()));
+            assertEquals(plan, Files.readString(backfillFolder().resolve("plan.json")));
+        }
+        assertEquals(0, heirLookups);
+        assertNull(loaded(1).getOwnerCharacterId());
+        assertFalse(Files.exists(backfillFolder().resolve("done.json")));
     }
 
     @Test
@@ -234,6 +418,16 @@ class StationBackfillTest {
             return Optional.ofNullable(heirs.get(account));
         };
         return new StationBackfill(backfillFolder(), logger, () -> ready, lookup);
+    }
+
+    private StationBackfill.Destination destination(String character) {
+        return new StationBackfill.Destination(ACCOUNT, character);
+    }
+
+    private void writePlan(Map<String, StationBackfill.Destination> destinations) throws Exception {
+        Files.createDirectories(backfillFolder());
+        Files.writeString(backfillFolder().resolve("plan.json"), new com.google.gson.GsonBuilder().serializeNulls()
+                .create().toJson(new StationBackfill.Plan(destinations, List.of())));
     }
 
     private StationBackfill.Result result() throws Exception {
