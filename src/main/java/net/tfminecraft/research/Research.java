@@ -5,6 +5,7 @@ import java.io.File;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.research.command.CommandManager;
+import net.tfminecraft.research.database.StationBackfill;
 import net.tfminecraft.research.estate.EstateProbe;
 import net.tfminecraft.research.estate.StationEstate;
 import net.tfminecraft.research.loader.AspectLoader;
@@ -53,6 +54,7 @@ public class Research extends JavaPlugin {
         getCommand("research").setTabCompleter(commandManager);
         getServer().getPluginManager().registerEvents(researchManager, this);
         researchManager.start();
+        StationBackfill.forPlugin(getDataFolder(), getLogger()).run(researchManager.stations());
         if (EstateProbe.available(EstateProbe.CLASSES)) {
             StationEstate.start(this, researchManager);
         } else {

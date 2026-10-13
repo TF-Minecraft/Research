@@ -56,6 +56,10 @@ class ResearchLifecycleTest {
         assertEquals(1, registrations.size());
         assertEquals("research", registrations.iterator().next().getProvider().id());
         assertSame(plugin, registrations.iterator().next().getPlugin());
+        // Stations are loaded, then the one-time heir backfill sees them.
+        var order = inOrder(plugin.getResearchManager());
+        order.verify(plugin.getResearchManager()).start();
+        order.verify(plugin.getResearchManager()).stations();
     }
     @Test void tlibsWithoutEstatesStillEnablesResearchWithoutTheParticipant() {
         try (MockedStatic<EstateProbe> probe = mockStatic(EstateProbe.class)) {

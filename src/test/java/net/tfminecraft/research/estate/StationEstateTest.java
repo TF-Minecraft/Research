@@ -104,6 +104,16 @@ class StationEstateTest {
     }
 
     @Test
+    void theManagerListsLoadedStationsReadOnly() {
+        save(TESTATOR, 1);
+        save(OTHER, 2);
+        manager.start();
+
+        assertEquals(2, manager.stations().size());
+        assertThrows(UnsupportedOperationException.class, () -> manager.stations().clear());
+    }
+
+    @Test
     void sameAccountRecipientKeepsTheAccountAndTakesTheCharacter() throws Exception {
         save(TESTATOR, 1);
         manager.start();

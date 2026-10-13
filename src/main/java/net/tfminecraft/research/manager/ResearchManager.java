@@ -93,6 +93,11 @@ public final class ResearchManager implements Listener {
         stations.clear();
     }
 
+    /** Every loaded station, read-only. */
+    public List<ResearchStation> stations() {
+        return java.util.Collections.unmodifiableList(stations);
+    }
+
     /** Stations whose project this character started. */
     public List<ResearchStation> stationsOwnedBy(String characterId) {
         return stations.stream().filter(station -> characterId.equalsIgnoreCase(station.getOwnerCharacterId())).toList();

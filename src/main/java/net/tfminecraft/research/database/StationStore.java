@@ -183,7 +183,8 @@ public final class StationStore {
         return new File(Research.plugin.getDataFolder(), "data/stations");
     }
 
-    private static File fileFor(Location location) {
+    /** The file a station at this location is saved to. */
+    public static File fileFor(Location location) {
         return new File(folder(), ResearchStation.locationKey(location) + ".json");
     }
 }
