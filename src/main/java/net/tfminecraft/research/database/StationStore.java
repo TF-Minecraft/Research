@@ -2,10 +2,8 @@ package net.tfminecraft.research.database;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -60,12 +58,12 @@ public final class StationStore {
         }
     }
 
-    public static void saveStation(ResearchStation station) {
+    /** Writes the station atomically; false when it could not be saved (logged) or is incomplete. */
+    public static boolean saveStation(ResearchStation station) {
         if (station == null || station.getLocation() == null || station.getProject() == null) {
-            return;
+            return false;
         }
         File file = fileFor(station.getLocation());
-        file.getParentFile().mkdirs();
 
         ActiveProject project = station.getProject();
         StationSaveData data = new StationSaveData();
@@ -87,11 +85,13 @@ public final class StationStore {
         data.setTestedItems(new java.util.ArrayList<>(project.getTestedExperimentItems()));
         data.setAspectSlotOrder(new java.util.ArrayList<>(project.getAspectSlotOrder()));
 
-        try (Writer writer = new FileWriter(file)) {
-            GSON.toJson(data, writer);
+        try {
+            DurableFiles.write(file.toPath(), GSON.toJson(data));
+            return true;
         } catch (IOException ex) {
             Research.plugin.getLogger().severe("[Research] Failed to save station " + file.getName() + ": "
                     + ex.getMessage());
+            return false;
         }
     }
 
