@@ -422,12 +422,32 @@ class ResearchUtilitiesTest {
         Files.writeString(directory.resolve("other.txt"), "text");
         Files.createDirectory(directory.resolve("folder.yml"));
         assertEquals(List.of(), YamlFolder.listYamlFiles(lower.toFile()));
-        assertEquals(Set.of(lower.toFile(), upper.toFile()), new HashSet<>(YamlFolder.listYamlFiles(directory.toFile())));
+        assertEquals(List.of(lower.toFile(), upper.toFile()), YamlFolder.listYamlFiles(directory.toFile()));
         File unreadable = mock(File.class);
         when(unreadable.exists()).thenReturn(true);
         when(unreadable.isDirectory()).thenReturn(true);
         when(unreadable.listFiles()).thenReturn(null);
         assertEquals(List.of(), YamlFolder.listYamlFiles(unreadable));
+    }
+
+    @Test
+    void yamlFilesAreSortedByNameWhateverOrderTheFilesystemLists() {
+        File folder = mock(File.class);
+        when(folder.exists()).thenReturn(true);
+        when(folder.isDirectory()).thenReturn(true);
+        File b = yamlFile("b.yml");
+        File upperA = yamlFile("A.yml");
+        File lowerA = yamlFile("a.yml");
+        File c = yamlFile("C.yml");
+        when(folder.listFiles()).thenReturn(new File[] {c, lowerA, b, upperA});
+        assertEquals(List.of(upperA, lowerA, b, c), YamlFolder.listYamlFiles(folder));
+    }
+
+    private static File yamlFile(String name) {
+        File file = mock(File.class);
+        when(file.isFile()).thenReturn(true);
+        when(file.getName()).thenReturn(name);
+        return file;
     }
 
     @Test
