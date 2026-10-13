@@ -208,15 +208,31 @@ class ResearchPersistenceTest {
     }
 
     @Test
+    void savingReplacesTheWholeFileAndLeavesNoTemporaryFiles() throws Exception {
+        Path file = stationsFolder().resolve("world_1_64_2.json");
+        Files.createDirectories(stationsFolder());
+        Files.writeString(file, "x".repeat(10_000));
+        ResearchStation station = station();
+        station.setOwnerCharacterId("alice");
+
+        assertTrue(StationStore.saveStation(station));
+
+        assertEquals("alice", new Gson().fromJson(Files.readString(file), StationSaveData.class).getOwnerCharacterId());
+        try (var files = Files.list(stationsFolder())) {
+            assertEquals(List.of(file), files.toList());
+        }
+    }
+
+    @Test
     void invalidSaveInputsAreIgnoredAndFilesystemFailuresAreLogged() throws Exception {
-        StationStore.saveStation(null);
-        StationStore.saveStation(new ResearchStation(null, OWNER, station().getProject()));
-        StationStore.saveStation(new ResearchStation(new Location(world, 1, 64, 2), OWNER, null));
+        assertFalse(StationStore.saveStation(null));
+        assertFalse(StationStore.saveStation(new ResearchStation(null, OWNER, station().getProject())));
+        assertFalse(StationStore.saveStation(new ResearchStation(new Location(world, 1, 64, 2), OWNER, null)));
         assertFalse(Files.exists(stationsFolder()));
         Path file = stationsFolder().resolve("world_1_64_2.json");
         Files.createDirectories(file);
         Files.writeString(file.resolve("child"), "prevents deletion");
-        assertDoesNotThrow(() -> StationStore.saveStation(station()));
+        assertFalse(StationStore.saveStation(station()));
         verify(logger).severe(contains("Failed to save station"));
         StationStore.deleteStation(station().getLocation());
         verify(logger).warning(contains("Failed to delete station file"));

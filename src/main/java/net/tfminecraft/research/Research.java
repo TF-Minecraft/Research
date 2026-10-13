@@ -5,6 +5,9 @@ import java.io.File;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.research.command.CommandManager;
+import net.tfminecraft.research.database.StationBackfill;
+import net.tfminecraft.research.estate.EstateProbe;
+import net.tfminecraft.research.estate.StationEstate;
 import net.tfminecraft.research.loader.AspectLoader;
 import net.tfminecraft.research.loader.ConfigLoader;
 import net.tfminecraft.research.loader.GuiLoader;
@@ -51,6 +54,12 @@ public class Research extends JavaPlugin {
         getCommand("research").setTabCompleter(commandManager);
         getServer().getPluginManager().registerEvents(researchManager, this);
         researchManager.start();
+        StationBackfill.forPlugin(getDataFolder(), getLogger()).run(researchManager.stations());
+        if (EstateProbe.available(EstateProbe.CLASSES)) {
+            StationEstate.start(this, researchManager);
+        } else {
+            getLogger().warning("TLibs has no estate API (2.6.0 or later); stations of dead characters stay with them.");
+        }
         started = true;
         getLogger().info("Research enabled.");
     }

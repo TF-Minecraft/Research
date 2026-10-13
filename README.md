@@ -23,6 +23,8 @@ project produces its result item at the station.
   other plugins can react to discoveries.
 - **Persistent stations** — ownership, aspect progress, tested items, and the rolled
   result survive server restarts.
+- **Stations pass on at death** — a dead character's stations go with the estate to
+  the will heir or the guild leader.
 - **Ordinary lectern use** — lecterns without an active project still accept and
   open written books and books and quills.
 
@@ -39,7 +41,7 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 Run `mvn clean verify` with Java 21 after preparing the pinned private and shared
 dependencies using the [build dependency guide](https://github.com/TF-Minecraft/Docs/blob/main/PIPELINES.md#build-dependencies).
 JUnit 5, Mockito, and MockBukkit cover project progress, menus, item handling,
-persistence, configuration, and lifecycle behaviour. Surefire test results are
+persistence, configuration, estates and lifecycle behaviour. Surefire test results are
 in `target/surefire-reports/`. The build enforces **100% executable-line coverage** across
 all production Java classes, with no coverage exclusions. JaCoCo's HTML and XML
 reports are written to `target/site/jacoco/` and uploaded by the Build workflow.

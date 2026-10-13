@@ -54,6 +54,7 @@ import net.tfminecraft.research.util.RevealHelper;
 import net.tfminecraft.research.util.SoundKeys;
 import net.tfminecraft.research.util.StationCompleteEffects;
 import net.tfminecraft.research.util.StationStartEffects;
+import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
 
 public final class ResearchManager implements Listener {
@@ -90,6 +91,40 @@ public final class ResearchManager implements Listener {
         }
         StationStore.saveAll(stations);
         stations.clear();
+    }
+
+    /** Every loaded station, read-only. */
+    public List<ResearchStation> stations() {
+        return java.util.Collections.unmodifiableList(stations);
+    }
+
+    /** Stations whose project this character started. */
+    public List<ResearchStation> stationsOwnedBy(String characterId) {
+        return stations.stream().filter(station -> characterId.equalsIgnoreCase(station.getOwnerCharacterId())).toList();
+    }
+
+    /** The station with this {@link ResearchStation#locationKey} key, or null. */
+    public ResearchStation getStationByKey(String key) {
+        for (ResearchStation station : stations) {
+            if (ResearchStation.locationKey(station.getLocation()).equals(key)) {
+                return station;
+            }
+        }
+        return null;
+    }
+
+    /** Gives a station to another character and saves it. A failed save puts the old owner back. */
+    public boolean transferStation(ResearchStation station, CharacterRef to) {
+        UUID previousAccount = station.getOwnerUuid();
+        String previousCharacter = station.getOwnerCharacterId();
+        station.setOwnerUuid(to.ownerId());
+        station.setOwnerCharacterId(to.characterId().toString());
+        if (StationStore.saveStation(station)) {
+            return true;
+        }
+        station.setOwnerUuid(previousAccount);
+        station.setOwnerCharacterId(previousCharacter);
+        return false;
     }
 
     public ResearchStation getStationAt(Location location) {

@@ -1,10 +1,12 @@
 package net.tfminecraft.research;
 
 import net.tfminecraft.research.command.CommandManager;
+import net.tfminecraft.research.estate.EstateProbe;
 import net.tfminecraft.research.loader.ConfigLoader;
 import net.tfminecraft.research.manager.*;
 import net.tfminecraft.research.util.ItemRef;
 import net.tfminecraft.tlibs.character.Characters;
+import net.tfminecraft.tlibs.character.estate.EstateParticipant;
 import org.bukkit.command.*;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.*;
@@ -47,6 +49,26 @@ class ResearchLifecycleTest {
         plugin.onEnable(); // Existing resources and folders survive a later enable.
         assertTrue(Files.readString(plugin.getDataFolder().toPath().resolve("config.yml")).contains("external_modifiers"));
         plugin.onDisable(); verify(plugin.getResearchManager()).unloadAll();
+    }
+    @Test void enableRegistersTheStationEstateParticipantAfterLoadingStations() {
+        Research plugin = MockBukkit.load(Research.class);
+        var registrations = plugin.getServer().getServicesManager().getRegistrations(EstateParticipant.class);
+        assertEquals(1, registrations.size());
+        assertEquals("research", registrations.iterator().next().getProvider().id());
+        assertSame(plugin, registrations.iterator().next().getPlugin());
+        // Stations are loaded, then the one-time heir backfill sees them.
+        var order = inOrder(plugin.getResearchManager());
+        order.verify(plugin.getResearchManager()).start();
+        order.verify(plugin.getResearchManager()).stations();
+    }
+    @Test void tlibsWithoutEstatesStillEnablesResearchWithoutTheParticipant() {
+        try (MockedStatic<EstateProbe> probe = mockStatic(EstateProbe.class)) {
+            probe.when(() -> EstateProbe.available(any(String[].class))).thenReturn(false);
+            Research plugin = MockBukkit.load(Research.class);
+            assertTrue(plugin.isEnabled());
+            verify(plugin.getResearchManager()).start();
+            assertTrue(plugin.getServer().getServicesManager().getRegistrations(EstateParticipant.class).isEmpty());
+        }
     }
     @Test void olderTLibsDisablesResearchBeforeItRegistersAnything() {
         try (MockedStatic<Characters> characters = mockStatic(Characters.class)) {
