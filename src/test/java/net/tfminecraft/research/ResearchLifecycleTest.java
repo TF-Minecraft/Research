@@ -59,7 +59,7 @@ class ResearchLifecycleTest {
     }
     @Test void tlibsWithoutEstatesStillEnablesResearchWithoutTheParticipant() {
         try (MockedStatic<EstateProbe> probe = mockStatic(EstateProbe.class)) {
-            probe.when(() -> EstateProbe.available((String[]) any())).thenReturn(false);
+            probe.when(() -> EstateProbe.available(any(String[].class))).thenReturn(false);
             Research plugin = MockBukkit.load(Research.class);
             assertTrue(plugin.isEnabled());
             verify(plugin.getResearchManager()).start();
