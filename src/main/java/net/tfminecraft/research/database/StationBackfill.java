@@ -30,7 +30,7 @@ import net.tfminecraft.tlibs.character.Characters;
  * as 6a did for locks and vehicles. The plan ({@code plan.json}) is written before any station changes and
  * reused after a crash; each changed station's original file is kept in {@code backup/}; {@code done.json}
  * records the result, after which later boots do nothing. Accounts without a heir keep their stations
- * unassigned (the next character on the account claims them) and are listed for staff.
+ * unassigned and unusable, and are listed for staff.
  */
 public final class StationBackfill {
     static final String FOLDER = "data/backfill-character-v1";

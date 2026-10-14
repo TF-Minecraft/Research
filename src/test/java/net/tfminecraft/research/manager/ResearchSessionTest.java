@@ -143,7 +143,7 @@ class ResearchSessionTest {
     }
 
     @Test
-    void legacyOwnershipIsClaimedOnlyWhenReadyAndExistingCasingIsPreserved() {
+    void unassignedOwnershipCannotBeClaimedAndExistingCasingIsPreserved() {
         String original = station.getOwnerCharacterId();
         interact();
         assertEquals(original, station.getOwnerCharacterId());
@@ -156,8 +156,8 @@ class ResearchSessionTest {
         assertEquals("Character is loading.", player.nextMessage());
         current = ready;
         interact();
-        assertEquals(ready.ref().characterId().toString(), station.getOwnerCharacterId());
-        store.verify(() -> StationStore.saveStation(station), times(1));
+        assertNull(station.getOwnerCharacterId());
+        store.verifyNoInteractions();
     }
 
     @Test
