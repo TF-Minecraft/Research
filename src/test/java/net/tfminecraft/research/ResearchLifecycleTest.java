@@ -131,6 +131,9 @@ class ResearchLifecycleTest {
         commands.onCommand(sender,command,"research",new String[]{"RELOAD"}); verify(sender).sendMessage("reload.success");
         commands.onCommand(sender,command,"research",new String[]{"bad"}); verify(sender).sendMessage("command.unknown_subcommand");
         assertEquals(List.of("reload"),commands.onTabComplete(sender,command,"research",new String[]{""}));
+        assertEquals(List.of("reload"),commands.onTabComplete(sender,command,"research",new String[]{"RE"}));
+        assertEquals(List.of("reload"),commands.onTabComplete(sender,command,"research",new String[]{"reload"}));
+        assertEquals(List.of(),commands.onTabComplete(sender,command,"research",new String[]{"zzz"}));
         assertEquals(List.of(),commands.onTabComplete(sender,command,"research",new String[]{"reload",""}));
     }
 }

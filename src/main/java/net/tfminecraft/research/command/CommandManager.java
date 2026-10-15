@@ -2,6 +2,7 @@ package net.tfminecraft.research.command;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -43,7 +44,8 @@ public final class CommandManager implements CommandExecutor, TabCompleter {
             return Collections.emptyList();
         }
         if (args.length == 1) {
-            return SUBCOMMANDS;
+            String prefix = args[0].toLowerCase(Locale.ROOT);
+            return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(prefix)).toList();
         }
         return Collections.emptyList();
     }
