@@ -13,6 +13,8 @@ project produces its result item at the station.
   outputs, and the output's result is fixed when the project begins.
 - **Experiment-driven discovery** — items carry primary and secondary aspects that
   add points to the project, while unneeded aspects are eventually rejected.
+- **Random aspect pools** — an output can list an `aspect_pool` and a `pick` count,
+  so each project draws that many required aspects from the pool when it begins.
 - **Hidden recipes** — required aspects sit among decoy rows in a shuffled station
   menu, and both their identity and the product are revealed as research progresses.
 - **Character focus** — experiments spend RPCharacters focus points, and a configurable

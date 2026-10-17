@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ import net.tfminecraft.research.Research;
 import net.tfminecraft.research.loader.InputLoader;
 import net.tfminecraft.research.loader.OutputLoader;
 import net.tfminecraft.research.model.ActiveProject;
+import net.tfminecraft.research.model.AspectState;
 import net.tfminecraft.research.model.OutputDef;
 import net.tfminecraft.research.model.ResearchStation;
 import net.tfminecraft.research.util.AspectSlotOrder;
@@ -84,6 +86,7 @@ public final class StationStore {
         data.setAspectStates(new java.util.HashMap<>(project.getAspectStates()));
         data.setTestedItems(new java.util.ArrayList<>(project.getTestedExperimentItems()));
         data.setAspectSlotOrder(new java.util.ArrayList<>(project.getAspectSlotOrder()));
+        data.setPoolAspects(new java.util.ArrayList<>(project.getPoolAspects()));
 
         try {
             DurableFiles.write(file.toPath(), GSON.toJson(data));
@@ -163,11 +166,32 @@ public final class StationStore {
             }
             OutputDef outputDef = OutputLoader.getById(data.getResolvedOutputId());
             String context = "station " + file.getName();
+            List<String> savedPool = data.getPoolAspects() != null ? data.getPoolAspects() : List.of();
+            List<String> rejected = new ArrayList<>();
+            for (String aspectId : outputDef.getAspectPool().keySet()) {
+                if (project.getAspectState(aspectId) == AspectState.REJECTED) {
+                    rejected.add(aspectId);
+                }
+            }
+            project.setPoolAspects(outputDef.reconcilePoolAspects(savedPool, rejected));
+            for (String aspectId : project.getPoolAspects()) {
+                // A new draw the station rejected while it was off-recipe could never be confirmed.
+                if (!savedPool.contains(aspectId) && rejected.contains(aspectId)) {
+                    project.getAspectStates().remove(aspectId);
+                    project.getAspectPoints().remove(aspectId);
+                }
+            }
+            if (!project.getPoolAspects().equals(savedPool)) {
+                Research.plugin.getLogger().warning("[Research] Pool aspects for " + context + " changed from "
+                        + savedPool + " to " + project.getPoolAspects() + " to match output '"
+                        + outputDef.getId() + "'.");
+            }
             List<String> savedOrder = data.getAspectSlotOrder();
+            Collection<String> recipe = outputDef.getRecipeAspects(project).keySet();
             if (savedOrder == null || savedOrder.isEmpty()) {
-                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(outputDef, null, context));
+                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(recipe, null, context));
             } else {
-                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(outputDef, savedOrder, context));
+                project.setAspectSlotOrder(AspectSlotOrder.reconcileRowAssignments(recipe, savedOrder, context));
             }
             ResearchStation station = new ResearchStation(location, owner, project);
             station.setOwnerCharacterId(data.getOwnerCharacterId());

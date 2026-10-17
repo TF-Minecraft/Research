@@ -1,6 +1,7 @@
 package net.tfminecraft.research.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +25,7 @@ public final class ActiveProject {
     private final Map<String, Integer> aspectTestCounts = new HashMap<>();
     private final Set<String> testedExperimentItems = new HashSet<>();
     private final List<String> aspectSlotOrder = new ArrayList<>();
+    private final List<String> poolAspects = new ArrayList<>();
 
     public ActiveProject(String inputId, String resolvedOutputId, String resolvedResultRef) {
         this.inputId = inputId;
@@ -109,6 +111,25 @@ public final class ActiveProject {
 
     public boolean hasAspectSlotOrder() {
         return aspectSlotOrder.size() == GridLayout.ASPECT_ROW_COUNT;
+    }
+
+    /**
+     * Aspects this project drew from its output's {@code aspect_pool}, fixed when it started.
+     */
+    public List<String> getPoolAspects() {
+        return Collections.unmodifiableList(poolAspects);
+    }
+
+    public void setPoolAspects(List<String> aspectIds) {
+        poolAspects.clear();
+        if (aspectIds == null) {
+            return;
+        }
+        for (String aspectId : aspectIds) {
+            if (aspectId != null && !aspectId.isBlank() && !poolAspects.contains(aspectId)) {
+                poolAspects.add(aspectId);
+            }
+        }
     }
 
     public AspectState getAspectState(String aspectId) {

@@ -7,6 +7,7 @@ import net.tfminecraft.research.loader.InputLoader;
 import net.tfminecraft.research.loader.OutputLoader;
 import net.tfminecraft.research.manager.StationMenuHolder;
 import net.tfminecraft.research.model.ActiveProject;
+import net.tfminecraft.research.model.AspectState;
 import net.tfminecraft.research.model.InputDef;
 import net.tfminecraft.research.model.OutputDef;
 import net.tfminecraft.research.model.ResearchStation;
@@ -24,12 +25,14 @@ import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
 
@@ -151,6 +154,81 @@ class ResearchPersistenceTest {
         assertEquals(1, project.getAspectSlotOrder().stream().filter("fire"::equals).count());
     }
 
+    private void pooledOutput() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("aspects.fire.required_points", 10);
+        config.set("aspect_pool.pick", 2);
+        for (String id : List.of("water", "earth", "air")) config.set("aspect_pool.aspects." + id + ".required_points", 4);
+        OutputLoader.get().put("output", new OutputDef("output", config));
+    }
+
+    @Test
+    void poolDrawsSurviveARestartWithTheirRows() throws Exception {
+        pooledOutput();
+        ResearchStation original = station();
+        original.getProject().setPoolAspects(List.of("air", "water"));
+        original.getProject().setAspectSlotOrder(List.of("", "air", "fire", "", "water", ""));
+        StationStore.saveStation(original);
+        ActiveProject loaded = StationStore.loadAll().getFirst().getProject();
+        assertEquals(List.of("air", "water"), loaded.getPoolAspects());
+        assertEquals(List.of("", "air", "fire", "", "water", ""), loaded.getAspectSlotOrder());
+        verify(logger, never()).warning(anyString());
+        verify(logger, never()).info(anyString());
+    }
+
+    @Test
+    void savesWithMissingOrStalePoolDrawsAreToppedUpFromThePool() throws Exception {
+        pooledOutput();
+        StationSaveData stale = data();
+        stale.setPoolAspects(List.of("removed", "earth"));
+        stale.setAspectSlotOrder(List.of("removed", "earth", "fire", "", "", ""));
+        write("stale.json", new Gson().toJson(stale));
+        write("legacy.json", new Gson().toJson(data()).replace("\"pool_aspects\":[]", "\"pool_aspects\":null"));
+        for (ResearchStation station : StationStore.loadAll()) {
+            List<String> drawn = station.getProject().getPoolAspects();
+            assertEquals(2, drawn.size());
+            assertTrue(List.of("water", "earth", "air").containsAll(drawn));
+            assertEquals(3, station.getProject().getAspectSlotOrder().stream().filter(id -> !id.isBlank()).count());
+            assertTrue(station.getProject().getAspectSlotOrder().containsAll(drawn));
+        }
+        verify(logger).warning(contains("Pool aspects for station stale.json changed from [removed, earth]"));
+        verify(logger).warning(contains("Pool aspects for station legacy.json changed from []"));
+        verify(logger).warning(contains("Aspect row assignments for station stale.json were missing or stale"));
+    }
+
+    @Test
+    void newDrawsPreferAspectsTheStationHasNotRejected() throws Exception {
+        pooledOutput();
+        StationSaveData legacy = data();
+        legacy.setAspectStates(new HashMap<>(Map.of("water", "REJECTED", "earth", "REJECTED", "fire", "TESTING")));
+        legacy.setAspectPoints(new HashMap<>(Map.of("water", 5, "earth", 5)));
+        write("legacy.json", new Gson().toJson(legacy));
+        ActiveProject project = StationStore.loadAll().getFirst().getProject();
+        assertTrue(project.getPoolAspects().contains("air"));
+        String redrawn = project.getPoolAspects().get(project.getPoolAspects().indexOf("air") == 0 ? 1 : 0);
+        String other = redrawn.equals("water") ? "earth" : "water";
+        assertEquals(AspectState.UNKNOWN, project.getAspectState(redrawn));
+        assertEquals(0, project.getAspectPoints(redrawn));
+        assertEquals(AspectState.REJECTED, project.getAspectState(other));
+        assertEquals(5, project.getAspectPoints(other));
+        assertEquals(AspectState.TESTING, project.getAspectState("fire"));
+    }
+
+    @Test
+    void savedDrawsKeepTheirResearchState() throws Exception {
+        pooledOutput();
+        StationSaveData saved = data();
+        saved.setPoolAspects(List.of("water", "earth"));
+        saved.setAspectStates(new HashMap<>(Map.of("water", "CONFIRMED", "air", "REJECTED")));
+        saved.setAspectPoints(new HashMap<>(Map.of("water", 4, "air", 5)));
+        write("saved.json", new Gson().toJson(saved));
+        ActiveProject project = StationStore.loadAll().getFirst().getProject();
+        assertEquals(List.of("water", "earth"), project.getPoolAspects());
+        assertEquals(AspectState.CONFIRMED, project.getAspectState("water"));
+        assertEquals(4, project.getAspectPoints("water"));
+        assertEquals(AspectState.REJECTED, project.getAspectState("air"));
+    }
+
     @Test
     void legacyInvalidMissingWorldAndUnknownDefinitionsAreSkipped() throws Exception {
         write("null.json", "null");
@@ -261,6 +339,8 @@ class ResearchPersistenceTest {
         data.setAspectStates(null);
         data.setTestedItems(null);
         data.setAspectSlotOrder(null);
+        data.setPoolAspects(null);
+        assertTrue(data.getPoolAspects().isEmpty());
         assertTrue(data.getAspectPoints().isEmpty());
         assertTrue(data.getAspectTestCounts().isEmpty());
         assertTrue(data.getAspectStates().isEmpty());

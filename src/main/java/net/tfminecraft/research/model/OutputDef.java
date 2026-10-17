@@ -1,10 +1,13 @@
 package net.tfminecraft.research.model;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.configuration.ConfigurationSection;
 
@@ -16,6 +19,8 @@ public final class OutputDef {
     private final String productDisplayItemRef;
     private final int productRevealAfterConfirmedAspects;
     private final Map<String, AspectRequirement> aspects;
+    private final Map<String, AspectRequirement> aspectPool;
+    private final int aspectPoolPick;
     private final ResultSpec result;
 
     public OutputDef(String id, ConfigurationSection config) {
@@ -33,13 +38,11 @@ public final class OutputDef {
                 ? reveal.getInt("base_after_confirmed_aspects", 0)
                 : 0;
 
-        this.aspects = new LinkedHashMap<>();
-        ConfigurationSection aspectsSection = config.getConfigurationSection("aspects");
-        if (aspectsSection != null) {
-            for (String aspectId : aspectsSection.getKeys(false)) {
-                aspects.put(aspectId, new AspectRequirement(aspectsSection.getConfigurationSection(aspectId)));
-            }
-        }
+        this.aspects = readAspects(config.getConfigurationSection("aspects"));
+
+        ConfigurationSection pool = config.getConfigurationSection("aspect_pool");
+        this.aspectPool = readAspects(pool != null ? pool.getConfigurationSection("aspects") : null);
+        this.aspectPoolPick = pool != null ? pool.getInt("pick", 0) : 0;
 
         ConfigurationSection resultSection = config.getConfigurationSection("result");
         this.result = resultSection != null ? new ResultSpec(resultSection) : new ResultSpec(null);
@@ -69,8 +72,85 @@ public final class OutputDef {
         return Collections.unmodifiableMap(aspects);
     }
 
+    public Map<String, AspectRequirement> getAspectPool() {
+        return Collections.unmodifiableMap(aspectPool);
+    }
+
+    public int getAspectPoolPick() {
+        return aspectPoolPick;
+    }
+
+    /**
+     * Draws {@code aspect_pool.pick} distinct aspects from the pool for a new project.
+     */
+    public List<String> rollPoolAspects() {
+        List<String> ids = new ArrayList<>(aspectPool.keySet());
+        Collections.shuffle(ids, ThreadLocalRandom.current());
+        return new ArrayList<>(ids.subList(0, Math.max(0, Math.min(aspectPoolPick, ids.size()))));
+    }
+
+    /**
+     * Keeps the saved draws still in the pool (up to {@code pick}) and draws again to fill any gap,
+     * so a station survives pool edits without losing aspects it already researched.
+     */
+    public List<String> reconcilePoolAspects(List<String> saved) {
+        return reconcilePoolAspects(saved, List.of());
+    }
+
+    /**
+     * Like {@link #reconcilePoolAspects(List)}, but refills from {@code avoid} only once the rest of the
+     * pool is used up (a station passes the aspects it already rejected).
+     */
+    public List<String> reconcilePoolAspects(List<String> saved, Collection<String> avoid) {
+        List<String> kept = new ArrayList<>();
+        if (saved != null) {
+            for (String aspectId : saved) {
+                if (kept.size() < aspectPoolPick && aspectPool.containsKey(aspectId) && !kept.contains(aspectId)) {
+                    kept.add(aspectId);
+                }
+            }
+        }
+        List<String> remaining = new ArrayList<>(aspectPool.keySet());
+        remaining.removeAll(kept);
+        Collections.shuffle(remaining, ThreadLocalRandom.current());
+        remaining.sort(Comparator.comparing(avoid::contains));
+        for (String aspectId : remaining) {
+            if (kept.size() >= aspectPoolPick) {
+                break;
+            }
+            kept.add(aspectId);
+        }
+        return kept;
+    }
+
+    /**
+     * The aspects a project must complete: every fixed aspect, then the pool aspects it drew.
+     */
+    public Map<String, AspectRequirement> getRecipeAspects(ActiveProject project) {
+        Map<String, AspectRequirement> recipe = new LinkedHashMap<>(aspects);
+        if (project != null) {
+            for (String aspectId : project.getPoolAspects()) {
+                AspectRequirement requirement = aspectPool.get(aspectId);
+                if (requirement != null) {
+                    recipe.putIfAbsent(aspectId, requirement);
+                }
+            }
+        }
+        return recipe;
+    }
+
     public ResultSpec getResult() {
         return result;
+    }
+
+    private static Map<String, AspectRequirement> readAspects(ConfigurationSection section) {
+        Map<String, AspectRequirement> read = new LinkedHashMap<>();
+        if (section != null) {
+            for (String aspectId : section.getKeys(false)) {
+                read.put(aspectId, new AspectRequirement(section.getConfigurationSection(aspectId)));
+            }
+        }
+        return read;
     }
 
     public static final class ResultSpec {

@@ -95,9 +95,10 @@ public final class InventoryManager {
             inventory.setItem(GridLayout.SLOT_PRODUCT, productItem);
         }
 
+        Map<String, AspectRequirement> recipe = output.getRecipeAspects(activeProject);
         List<String> rowAssignments = activeProject.getAspectSlotOrder();
         if (!activeProject.hasAspectSlotOrder()) {
-            rowAssignments = AspectSlotOrder.reconcileRowAssignments(output, null,
+            rowAssignments = AspectSlotOrder.reconcileRowAssignments(recipe.keySet(), null,
                     "station " + station.getProject().getResolvedOutputId());
             activeProject.setAspectSlotOrder(rowAssignments);
         }
@@ -111,7 +112,7 @@ public final class InventoryManager {
                 continue;
             }
 
-            AspectRequirement requirement = output.getAspects().get(aspectId);
+            AspectRequirement requirement = recipe.get(aspectId);
             if (requirement == null) {
                 inventory.setItem(GridLayout.getAspectLockSlot(row), buildAspectRowDivider());
                 renderInactiveProgressRow(inventory, row);
