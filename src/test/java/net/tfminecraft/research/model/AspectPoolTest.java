@@ -74,6 +74,18 @@ class AspectPoolTest {
     }
 
     @Test
+    void reconcileRefillsFromAvoidedAspectsOnlyWhenNothingElseIsLeft() {
+        for (int roll = 0; roll < 50; roll++) {
+            assertEquals(Set.of("ice", "air", "fire"), new HashSet<>(
+                    output(3).reconcilePoolAspects(List.of("ice"), List.of("earth", "nature", "water"))));
+            List<String> forced = output(3).reconcilePoolAspects(List.of("ice"), List.of("earth", "nature", "water", "fire"));
+            assertEquals("ice", forced.getFirst());
+            assertTrue(forced.contains("air"));
+            assertEquals(3, new HashSet<>(forced).size());
+        }
+    }
+
+    @Test
     void projectsKeepDistinctNonBlankDraws() {
         ActiveProject project = new ActiveProject("input", "output", "v.paper");
         assertTrue(project.getPoolAspects().isEmpty());

@@ -1,7 +1,9 @@
 package net.tfminecraft.research.model;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,6 +94,14 @@ public final class OutputDef {
      * so a station survives pool edits without losing aspects it already researched.
      */
     public List<String> reconcilePoolAspects(List<String> saved) {
+        return reconcilePoolAspects(saved, List.of());
+    }
+
+    /**
+     * Like {@link #reconcilePoolAspects(List)}, but refills from {@code avoid} only once the rest of the
+     * pool is used up (a station passes the aspects it already rejected).
+     */
+    public List<String> reconcilePoolAspects(List<String> saved, Collection<String> avoid) {
         List<String> kept = new ArrayList<>();
         if (saved != null) {
             for (String aspectId : saved) {
@@ -103,6 +113,7 @@ public final class OutputDef {
         List<String> remaining = new ArrayList<>(aspectPool.keySet());
         remaining.removeAll(kept);
         Collections.shuffle(remaining, ThreadLocalRandom.current());
+        remaining.sort(Comparator.comparing(avoid::contains));
         for (String aspectId : remaining) {
             if (kept.size() >= aspectPoolPick) {
                 break;

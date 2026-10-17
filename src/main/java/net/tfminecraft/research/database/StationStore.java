@@ -18,6 +18,7 @@ import net.tfminecraft.research.Research;
 import net.tfminecraft.research.loader.InputLoader;
 import net.tfminecraft.research.loader.OutputLoader;
 import net.tfminecraft.research.model.ActiveProject;
+import net.tfminecraft.research.model.AspectState;
 import net.tfminecraft.research.model.OutputDef;
 import net.tfminecraft.research.model.ResearchStation;
 import net.tfminecraft.research.util.AspectSlotOrder;
@@ -166,7 +167,20 @@ public final class StationStore {
             OutputDef outputDef = OutputLoader.getById(data.getResolvedOutputId());
             String context = "station " + file.getName();
             List<String> savedPool = data.getPoolAspects() != null ? data.getPoolAspects() : List.of();
-            project.setPoolAspects(outputDef.reconcilePoolAspects(savedPool));
+            List<String> rejected = new ArrayList<>();
+            for (String aspectId : outputDef.getAspectPool().keySet()) {
+                if (project.getAspectState(aspectId) == AspectState.REJECTED) {
+                    rejected.add(aspectId);
+                }
+            }
+            project.setPoolAspects(outputDef.reconcilePoolAspects(savedPool, rejected));
+            for (String aspectId : project.getPoolAspects()) {
+                // A new draw the station rejected while it was off-recipe could never be confirmed.
+                if (!savedPool.contains(aspectId) && rejected.contains(aspectId)) {
+                    project.getAspectStates().remove(aspectId);
+                    project.getAspectPoints().remove(aspectId);
+                }
+            }
             if (!project.getPoolAspects().equals(savedPool)) {
                 Research.plugin.getLogger().warning("[Research] Pool aspects for " + context + " changed from "
                         + savedPool + " to " + project.getPoolAspects() + " to match output '"

@@ -7,6 +7,7 @@ import net.tfminecraft.research.loader.InputLoader;
 import net.tfminecraft.research.loader.OutputLoader;
 import net.tfminecraft.research.manager.StationMenuHolder;
 import net.tfminecraft.research.model.ActiveProject;
+import net.tfminecraft.research.model.AspectState;
 import net.tfminecraft.research.model.InputDef;
 import net.tfminecraft.research.model.OutputDef;
 import net.tfminecraft.research.model.ResearchStation;
@@ -24,6 +25,7 @@ import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -192,6 +194,39 @@ class ResearchPersistenceTest {
         verify(logger).warning(contains("Pool aspects for station stale.json changed from [removed, earth]"));
         verify(logger).warning(contains("Pool aspects for station legacy.json changed from []"));
         verify(logger).warning(contains("Aspect row assignments for station stale.json were missing or stale"));
+    }
+
+    @Test
+    void newDrawsPreferAspectsTheStationHasNotRejected() throws Exception {
+        pooledOutput();
+        StationSaveData legacy = data();
+        legacy.setAspectStates(new HashMap<>(Map.of("water", "REJECTED", "earth", "REJECTED", "fire", "TESTING")));
+        legacy.setAspectPoints(new HashMap<>(Map.of("water", 5, "earth", 5)));
+        write("legacy.json", new Gson().toJson(legacy));
+        ActiveProject project = StationStore.loadAll().getFirst().getProject();
+        assertTrue(project.getPoolAspects().contains("air"));
+        String redrawn = project.getPoolAspects().get(project.getPoolAspects().indexOf("air") == 0 ? 1 : 0);
+        String other = redrawn.equals("water") ? "earth" : "water";
+        assertEquals(AspectState.UNKNOWN, project.getAspectState(redrawn));
+        assertEquals(0, project.getAspectPoints(redrawn));
+        assertEquals(AspectState.REJECTED, project.getAspectState(other));
+        assertEquals(5, project.getAspectPoints(other));
+        assertEquals(AspectState.TESTING, project.getAspectState("fire"));
+    }
+
+    @Test
+    void savedDrawsKeepTheirResearchState() throws Exception {
+        pooledOutput();
+        StationSaveData saved = data();
+        saved.setPoolAspects(List.of("water", "earth"));
+        saved.setAspectStates(new HashMap<>(Map.of("water", "CONFIRMED", "air", "REJECTED")));
+        saved.setAspectPoints(new HashMap<>(Map.of("water", 4, "air", 5)));
+        write("saved.json", new Gson().toJson(saved));
+        ActiveProject project = StationStore.loadAll().getFirst().getProject();
+        assertEquals(List.of("water", "earth"), project.getPoolAspects());
+        assertEquals(AspectState.CONFIRMED, project.getAspectState("water"));
+        assertEquals(4, project.getAspectPoints("water"));
+        assertEquals(AspectState.REJECTED, project.getAspectState("air"));
     }
 
     @Test
