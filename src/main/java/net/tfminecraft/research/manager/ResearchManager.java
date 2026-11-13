@@ -72,7 +72,10 @@ public final class ResearchManager implements Listener {
             "#c45749This research is not working right now. Please tell a staff member.";
 
     private final List<ResearchStation> stations = new ArrayList<>();
-    /** At most one entry per online player: the lectern and tick of their last main-hand reopen finish. */
+    /**
+     * At most one entry per online player: the lectern and tick of their last main-hand reopen finish.
+     * Expires after its tick window; removed on the next station click, quit or unload.
+     */
     private final Map<UUID, FinishedClick> finishedClicks = new HashMap<>();
 
     private record FinishedClick(String lecternKey, int tick) {}
@@ -805,7 +808,8 @@ public final class ResearchManager implements Listener {
         if (click == null) {
             return false;
         }
-        if (click.tick() != Bukkit.getCurrentTick()) {
+        // The two hand packets of one click can straddle a tick boundary, so the window is this tick and the next.
+        if (Bukkit.getCurrentTick() - click.tick() > 1) {
             finishedClicks.remove(player.getUniqueId());
             return false;
         }

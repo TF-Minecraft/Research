@@ -1471,11 +1471,13 @@ class ResearchManagerTest {
         return paper;
     }
 
-    @Test
-    void offHandHalfOfTheFinishingClickDoesNotStartANewProject() {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void offHandHalfOfTheFinishingClickDoesNotStartANewProject(int ticksLater) {
         ItemStack paper = finishableProjectWithStartItemInOffHand();
 
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        bukkit.when(Bukkit::getCurrentTick).thenReturn(ticksLater);
         PlayerInteractEvent offHand = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND);
         manager.onStationInteract(offHand);
 
@@ -1489,15 +1491,20 @@ class ResearchManagerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"later-tick", "other-lectern", "after-quit", "after-unload"})
+    @ValueSource(strings = {"later-tick", "other-lectern", "after-quit", "after-unload", "main-hand-same-tick"})
     void offHandStartsStillWorkOnOtherTicksAndLecterns(String situation) {
         ItemStack paper = finishableProjectWithStartItemInOffHand();
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
         assertNull(manager.getStationAt(location));
         Block target = lectern;
         Location targetLocation = location;
+        EquipmentSlot hand = EquipmentSlot.OFF_HAND;
         switch (situation) {
-            case "later-tick" -> bukkit.when(Bukkit::getCurrentTick).thenReturn(1);
+            case "later-tick" -> bukkit.when(Bukkit::getCurrentTick).thenReturn(2);
+            case "main-hand-same-tick" -> {
+                when(bottom.getItemInMainHand()).thenReturn(paper);
+                hand = EquipmentSlot.HAND;
+            }
             case "other-lectern" -> {
                 targetLocation = new Location(world, 30, 64, 20);
                 target = mock(Block.class);
@@ -1512,7 +1519,7 @@ class ResearchManagerTest {
             }
         }
 
-        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, target, EquipmentSlot.OFF_HAND));
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, target, hand));
 
         ResearchStation started = manager.getStationAt(targetLocation);
         assertNotNull(started);
