@@ -15,6 +15,7 @@ station:
   hold_start_item: "#c45749Hold a research paper in your hand to use this station."
   invalid_start_item: "#c45749That item cannot start a research project."
   missing_start_item: "#c45749You need that research paper in your hand to start."
+  output_unavailable: "#c45749This research is not working right now. Please tell a staff member."
   scrapped: "#c45749Research project scrapped."
   broken: "#c45749Research at this lectern was destroyed."
   scrap_warning: "#c45749WARNING! #ff5555The project will not be refunded!"

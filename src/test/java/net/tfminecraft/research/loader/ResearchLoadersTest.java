@@ -223,6 +223,74 @@ class ResearchLoadersTest {
     }
 
     @Test
+    void templateWrittenAsResultItemLoadsAsATemplateWithAWarning() throws Exception {
+        AspectLoader.get().put("fire", new AspectDef("fire", config("{}")));
+        TemplateLoader.get().put("loot", new ResultTemplateDef("loot", List.of(new ResultTemplateDef.WeightedOutput("v.paper", 1))));
+        File file = yaml("alias-outputs/a.yml", """
+                alias:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  aspects: {fire: {required_points: 1}}
+                  result: {item: " t.loot "}
+                alias-and-template:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  aspects: {fire: {required_points: 1}}
+                  result: {item: t.loot, template: t.loot}
+                """);
+
+        assertFalse(new OutputLoader().loadFolder(file.getParentFile()));
+
+        OutputDef.ResultSpec alias = OutputLoader.getById("alias").getResult();
+        assertTrue(alias.isTemplateInItemKey());
+        assertTrue(alias.hasTemplate());
+        assertFalse(alias.hasItem());
+        assertTrue(OutputLoader.passedChecks("alias"));
+        verify(logger).warning(contains("Output 'alias' sets result.item: t.loot, which is a template."
+                + " It is read as result.template; write it as result.template in a.yml"));
+        OutputDef.ResultSpec both = OutputLoader.getById("alias-and-template").getResult();
+        assertFalse(both.isTemplateInItemKey());
+        assertTrue(both.hasItem() && both.hasTemplate());
+        assertFalse(OutputLoader.passedChecks("alias-and-template"));
+        assertEquals(java.util.Set.of("alias-and-template"), OutputLoader.failedChecks());
+        assertThrows(UnsupportedOperationException.class, () -> OutputLoader.failedChecks().add("x"));
+    }
+
+    @Test
+    void outputsWithNothingToResearchFailTheirChecks() throws Exception {
+        AspectLoader.get().put("fire", new AspectDef("fire", config("{}")));
+        File file = yaml("empty-recipe/a.yml", """
+                nothing: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}}
+                fixed: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspects: {fire: {required_points: 1}}}
+                pooled: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}, aspect_pool: {pick: 1, aspects: {fire: {required_points: 1}}}}
+                """);
+
+        assertFalse(new OutputLoader().loadFolder(file.getParentFile()));
+
+        assertEquals(java.util.Set.of("nothing"), OutputLoader.failedChecks());
+        verify(logger).severe(contains("Output 'nothing' lists no aspects and no aspect_pool.pick in a.yml"));
+        assertTrue(OutputLoader.firstRefusal("input -> nothing"));
+        assertFalse(OutputLoader.firstRefusal("input -> nothing"));
+        new OutputLoader().loadFolder(file.getParentFile());
+        assertTrue(OutputLoader.firstRefusal("input -> nothing"), "a load forgets logged refusals");
+    }
+
+    @Test
+    void outputsThatFailTheirChecksAreListedUntilTheNextLoad() throws Exception {
+        AspectLoader.get().put("fire", new AspectDef("fire", config("{}")));
+        File bad = yaml("checked-bad/a.yml", "broken: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, aspects: {fire: {required_points: 1}}, result: {item: t.missing}}\n");
+        assertFalse(new OutputLoader().loadFolder(bad.getParentFile()));
+        assertNotNull(OutputLoader.getById("broken"));
+        assertFalse(OutputLoader.passedChecks("broken"));
+        verify(logger).severe(contains("Output 'broken' references unknown template 'missing'"));
+
+        File good = yaml("checked-good/a.yml", "broken: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, aspects: {fire: {required_points: 1}}, result: {item: v.paper}}\n");
+        assertTrue(new OutputLoader().loadFolder(good.getParentFile()));
+        assertTrue(OutputLoader.passedChecks("broken"));
+        assertTrue(OutputLoader.failedChecks().isEmpty());
+    }
+
+    @Test
     void outputAspectPoolsLoadAndValidatePickSizeOverlapAndRows() throws Exception {
         for (String id : List.of("fire", "water", "earth", "air")) AspectLoader.get().put(id, new AspectDef(id, config("{}")));
         File good = yaml("pool-good/a.yml", """

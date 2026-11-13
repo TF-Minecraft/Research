@@ -37,6 +37,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -59,7 +60,9 @@ import net.tfminecraft.research.Research;
 import net.tfminecraft.research.database.StationStore;
 import net.tfminecraft.research.event.ResearchCompleteEvent;
 import net.tfminecraft.research.loader.AspectLoader;
+import net.tfminecraft.research.loader.OutputChecks;
 import net.tfminecraft.research.loader.OutputLoader;
+import net.tfminecraft.research.loader.TemplateLoader;
 import net.tfminecraft.research.model.ActiveProject;
 import net.tfminecraft.research.model.AspectDef;
 import net.tfminecraft.research.model.AspectState;
@@ -67,6 +70,7 @@ import net.tfminecraft.research.model.ExperimentMatch;
 import net.tfminecraft.research.model.InputDef;
 import net.tfminecraft.research.model.OutputDef;
 import net.tfminecraft.research.model.ResearchStation;
+import net.tfminecraft.research.model.ResultTemplateDef;
 import net.tfminecraft.research.registry.AspectItemRegistry;
 import net.tfminecraft.research.util.GridLayout;
 import net.tfminecraft.research.util.InputMatcher;
@@ -81,6 +85,7 @@ class ResearchManagerTest {
     private final List<AutoCloseable> mocks = new ArrayList<>();
     private final Map<Field, Object> originalCache = new LinkedHashMap<>();
     private Map<String, OutputDef> originalOutputs;
+    private Map<String, ResultTemplateDef> originalTemplates;
     private Map<String, AspectDef> originalAspects;
     private Research originalPlugin;
     private ResearchManager originalManager;
@@ -124,6 +129,9 @@ class ResearchManagerTest {
             originalCache.put(field, field.get(null));
         }
         originalOutputs = new LinkedHashMap<>(OutputLoader.get());
+        originalTemplates = new LinkedHashMap<>(TemplateLoader.get());
+        TemplateLoader.get().clear();
+        OutputChecks.reset();
         originalAspects = new LinkedHashMap<>(AspectLoader.get());
         OutputLoader.get().clear();
         AspectLoader.get().clear();
@@ -219,6 +227,7 @@ class ResearchManagerTest {
         sounds = scoped(mockStatic(SoundKeys.class));
         messages = scoped(mockStatic(Messages.class));
         messages.when(() -> Messages.get(anyString())).thenAnswer(call -> call.getArgument(0));
+        messages.when(() -> Messages.getOrDefault(anyString(), anyString())).thenAnswer(call -> call.getArgument(0));
         messages.when(() -> Messages.format(anyString(), anyMap()))
                 .thenAnswer(call -> call.getArgument(0) + " " + call.getArgument(1));
         scoped(mockStatic(MmoAttributes.class));
@@ -241,6 +250,9 @@ class ResearchManagerTest {
         }
         OutputLoader.get().clear();
         OutputLoader.get().putAll(originalOutputs);
+        OutputChecks.reset();
+        TemplateLoader.get().clear();
+        TemplateLoader.get().putAll(originalTemplates);
         AspectLoader.get().clear();
         AspectLoader.get().putAll(originalAspects);
         Research.plugin = originalPlugin;
@@ -612,7 +624,7 @@ class ResearchManagerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"unknown-output", "disabled", "unresolved", "missing-item"})
+    @ValueSource(strings = {"unknown-output", "disabled", "failed-checks", "unresolved", "missing-item"})
     void startFailuresDoNotCreateOrConsumeAProject(String failure) {
         noStations();
         ItemStack held = stack(Material.PAPER, 1);
@@ -624,12 +636,21 @@ class ResearchManagerTest {
         if (failure.equals("disabled")) config.set("enabled", false);
         if (failure.equals("unresolved")) config.set("result", null);
         if (!failure.equals("unknown-output")) OutputLoader.get().put("output", new OutputDef("output", config));
+        if (failure.equals("failed-checks")) OutputChecks.markFailed("output");
 
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
 
         assertNull(manager.getStationAt(location));
         assertEquals(1, held.getAmount());
-        verify(player).sendMessage(failure.equals("missing-item") ? "station.missing_start_item" : "reload.failed");
+        verify(player).sendMessage(failure.equals("missing-item") ? "station.missing_start_item" : "station.output_unavailable");
+        if (!failure.equals("missing-item")) {
+            verify(logger).warning(contains("Researcher could not start research 'input': it " + switch (failure) {
+                case "unknown-output" -> "rolled output 'output', which is not loaded.";
+                case "disabled" -> "rolled output 'output', which is disabled.";
+                case "failed-checks" -> "rolled output 'output', which failed its load checks";
+                default -> "could not resolve the result of output 'output'.";
+            }));
+        }
         store.verify(() -> StationStore.saveStation(any()), never());
         startEffects.verifyNoInteractions();
     }
@@ -836,7 +857,8 @@ class ResearchManagerTest {
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
 
         assertNull(manager.getStationAt(location));
-        verify(player).sendMessage("reload.failed");
+        verify(player).sendMessage("station.output_unavailable");
+        verify(logger).warning(contains("could not start research 'input': it has no outputs."));
         assertEquals(1, held.getAmount());
     }
 
@@ -1225,6 +1247,305 @@ class ResearchManagerTest {
         verifyNoInteractions(replacement);
         rewards.verify(() -> ResultSpawnEffects.spawnAtStation(location, reward), times(1));
         completeEffects.verify(() -> StationCompleteEffects.play(player, location), times(switchesCharacter ? 0 : 1));
+    }
+
+    @Test
+    void savedTemplateResultIsRolledSavedAndGrantedAtCompletion() {
+        prepareExperiment("fire", null, Map.of("fire", 2));
+        project = new ActiveProject("input", "output", "t.greater_runestone");
+        station.setProject(project);
+        TemplateLoader.get().put("greater_runestone", new ResultTemplateDef("greater_runestone",
+                List.of(new ResultTemplateDef.WeightedOutput("m.loot.rune", 1))));
+        items.when(() -> ItemRef.hasKnownPrefix("m.loot.rune")).thenReturn(true);
+        ItemStack reward = stack(Material.PAPER, 1);
+        items.when(() -> ItemRef.build("m.loot.rune")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+        List<String> savedRefs = new ArrayList<>();
+        store.when(() -> StationStore.saveStation(station)).thenAnswer(call -> {
+            savedRefs.add(station.getProject().getResolvedResultRef()); return true;
+        });
+
+        confirm();
+
+        assertTrue(project.isCompleted());
+        assertEquals("m.loot.rune", project.getResolvedResultRef());
+        assertEquals(List.of("m.loot.rune"), savedRefs);
+        assertNull(manager.getStationAt(location));
+        verify(logger).info(contains("Resolved saved result template 't.greater_runestone' to 'm.loot.rune'"));
+        ArgumentCaptor<ResearchCompleteEvent> event = ArgumentCaptor.forClass(ResearchCompleteEvent.class);
+        verify(pluginManager).callEvent(event.capture());
+        assertEquals("m.loot.rune", event.getValue().getResultItemRef());
+        store.verify(() -> StationStore.deleteStation(location));
+    }
+
+    @Test
+    void savedTemplateThatNoLongerExistsKeepsTheProjectAndExplainsWhy() {
+        prepareExperiment("fire", null, Map.of("fire", 2));
+        project = new ActiveProject("input", "output", "t.gone");
+        station.setProject(project);
+
+        confirm();
+
+        assertFalse(project.isCompleted());
+        assertEquals("t.gone", project.getResolvedResultRef());
+        assertSame(station, manager.getStationAt(location));
+        verify(logger).warning(contains("Could not resolve saved result template 't.gone' for output 'output' at "
+                + ResearchStation.locationKey(location)));
+        items.verify(() -> ItemRef.build(anyString()), never());
+        verifyNoInteractions(pluginManager);
+    }
+
+    @Test
+    void reopeningAProjectWhoseRecipeIsAlreadyCompleteFinishesIt() {
+        output(Map.of("fire", 2));
+        project = new ActiveProject("input", "output", "t.greater_runestone");
+        project.setAspectState("fire", AspectState.CONFIRMED);
+        project.addAspectPoints("fire", 2, 2);
+        station.setProject(project);
+        TemplateLoader.get().put("greater_runestone", new ResultTemplateDef("greater_runestone",
+                List.of(new ResultTemplateDef.WeightedOutput("m.loot.rune", 1))));
+        items.when(() -> ItemRef.hasKnownPrefix("m.loot.rune")).thenReturn(true);
+        ItemStack reward = stack(Material.PAPER, 1);
+        items.when(() -> ItemRef.build("m.loot.rune")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        verify(menus).openMain(player, station);
+        assertTrue(project.isCompleted());
+        assertNull(manager.getStationAt(location));
+        verify(player).sendMessage("station.completed");
+        store.verify(() -> StationStore.deleteStation(location));
+        completeEffects.verify(() -> StationCompleteEffects.play(player, location));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"incomplete", "no-output", "already-completed", "failed-checks", "empty-recipe",
+            "foreign-menu", "other-station", "stale-menu", "off-hand"})
+    void reopeningOnlyFinishesACompleteProjectThroughItsOwnMenu(String situation) {
+        output(Map.of("fire", 2));
+        if (!situation.equals("incomplete")) {
+            project.setAspectState("fire", AspectState.CONFIRMED);
+            project.addAspectPoints("fire", 2, 2);
+        }
+        if (situation.equals("no-output")) OutputLoader.get().clear();
+        if (situation.equals("failed-checks")) OutputChecks.markFailed("output");
+        if (situation.equals("empty-recipe")) output(Map.of());
+        if (situation.equals("already-completed")) project.setCompleted(true);
+        if (situation.equals("foreign-menu")) when(top.getHolder()).thenReturn(null);
+        if (situation.equals("other-station")) {
+            when(top.getHolder()).thenReturn(new StationMenuHolder(location.clone().add(5, 0, 0), session));
+        }
+        if (situation.equals("stale-menu")) {
+            when(top.getHolder()).thenReturn(new StationMenuHolder(location, new CharacterSession(session.ref(), 9)));
+        }
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern,
+                situation.equals("off-hand") ? EquipmentSlot.OFF_HAND : EquipmentSlot.HAND));
+
+        verify(menus).openMain(player, station);
+        assertSame(station, manager.getStationAt(location));
+        if (!situation.equals("already-completed")) assertFalse(project.isCompleted());
+        items.verify(() -> ItemRef.build(anyString()), never());
+        store.verify(() -> StationStore.deleteStation(any()), never());
+        verify(player, never()).sendMessage("station.output_unavailable");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"unbuildable", "spawn-failed"})
+    void reopeningACompleteProjectWhoseRewardFailsTellsThePlayer(String failure) {
+        output(Map.of("fire", 2));
+        project.setAspectState("fire", AspectState.CONFIRMED);
+        project.addAspectPoints("fire", 2, 2);
+        if (failure.equals("spawn-failed")) {
+            ItemStack reward = stack(Material.DIAMOND, 1);
+            items.when(() -> ItemRef.build("vanilla.DIAMOND")).thenReturn(reward);
+        }
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        assertFalse(project.isCompleted());
+        assertSame(station, manager.getStationAt(location));
+        verify(player).sendMessage("station.output_unavailable");
+        verify(logger).warning(contains(failure.equals("unbuildable") ? "Could not build" : "Could not spawn"));
+        store.verify(() -> StationStore.deleteStation(any()), never());
+    }
+
+    @Test
+    void anotherPlayerCannotFinishACompleteProjectByOpeningIt() {
+        output(Map.of("fire", 2));
+        project.setAspectState("fire", AspectState.CONFIRMED);
+        project.addAspectPoints("fire", 2, 2);
+        station.setOwnerUuid(UUID.randomUUID());
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        verify(player).sendMessage("station.in_use");
+        verifyNoInteractions(menus);
+        assertFalse(project.isCompleted());
+        items.verify(() -> ItemRef.build(anyString()), never());
+        store.verify(() -> StationStore.deleteStation(any()), never());
+    }
+
+    @Test
+    void aRolledTemplateThatCannotBeBuiltKeepsTheTemplateSaved() {
+        prepareExperiment("fire", null, Map.of("fire", 2));
+        project = new ActiveProject("input", "output", "t.greater_runestone");
+        station.setProject(project);
+        TemplateLoader.get().put("greater_runestone", new ResultTemplateDef("greater_runestone",
+                List.of(new ResultTemplateDef.WeightedOutput("m.loot.rune", 1))));
+        items.when(() -> ItemRef.hasKnownPrefix("m.loot.rune")).thenReturn(true);
+        List<String> savedRefs = new ArrayList<>();
+        store.when(() -> StationStore.saveStation(station)).thenAnswer(call -> {
+            savedRefs.add(station.getProject().getResolvedResultRef()); return true;
+        });
+
+        confirm();
+
+        assertFalse(project.isCompleted());
+        assertEquals("t.greater_runestone", project.getResolvedResultRef());
+        assertEquals(List.of("t.greater_runestone"), savedRefs);
+        verify(logger).warning(contains("Could not build result item for output 'output': m.loot.rune"
+                + " (rolled from saved template 't.greater_runestone', kept)"));
+        verify(logger, never()).info(contains("Resolved saved result template"));
+        verifyNoInteractions(pluginManager);
+    }
+
+    @Test
+    void aRolledResultThatCannotBeSavedIsStillGrantedAndLogged() {
+        prepareExperiment("fire", null, Map.of("fire", 2));
+        project = new ActiveProject("input", "output", "t.greater_runestone");
+        station.setProject(project);
+        TemplateLoader.get().put("greater_runestone", new ResultTemplateDef("greater_runestone",
+                List.of(new ResultTemplateDef.WeightedOutput("m.loot.rune", 1))));
+        items.when(() -> ItemRef.hasKnownPrefix("m.loot.rune")).thenReturn(true);
+        ItemStack reward = stack(Material.PAPER, 1);
+        items.when(() -> ItemRef.build("m.loot.rune")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+        store.when(() -> StationStore.saveStation(station)).thenReturn(false);
+
+        confirm();
+
+        verify(logger).warning(contains("Could not save the rolled result 'm.loot.rune' for station "
+                + ResearchStation.locationKey(location) + "; the reward is still given."));
+        assertTrue(project.isCompleted());
+        assertNull(manager.getStationAt(location));
+        store.verify(() -> StationStore.deleteStation(location));
+    }
+
+    @Test
+    void aRefusedStartIsLoggedOncePerInputAndOutputUntilTheNextLoad() {
+        noStations();
+        ItemStack held = stack(Material.PAPER, 1);
+        when(bottom.getItemInMainHand()).thenReturn(held);
+        inputs.when(() -> InputMatcher.findByStartItem(held)).thenReturn(input("vanilla.PAPER", 1, "output"));
+        output(Map.of("fire", 2));
+        OutputChecks.markFailed("output");
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        verify(player, times(2)).sendMessage("station.output_unavailable");
+        verify(logger, times(1)).warning(contains("failed its load checks"));
+
+        OutputChecks.reset();
+        OutputChecks.markFailed("output");
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+
+        verify(logger, times(2)).warning(contains("failed its load checks"));
+        assertEquals(1, held.getAmount());
+    }
+
+    /** Seeds a complete project whose reward builds, so a main-hand reopen finishes it. */
+    private ItemStack finishableProjectWithStartItemInOffHand() {
+        output(Map.of("fire", 2));
+        project.setAspectState("fire", AspectState.CONFIRMED);
+        project.addAspectPoints("fire", 2, 2);
+        ItemStack reward = stack(Material.DIAMOND, 1);
+        items.when(() -> ItemRef.build("vanilla.DIAMOND")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+        ItemStack paper = stack(Material.PAPER, 2);
+        when(bottom.getItemInOffHand()).thenReturn(paper);
+        inputs.when(() -> InputMatcher.findByStartItem(paper)).thenReturn(input("vanilla.PAPER", 1, "output"));
+        items.when(() -> ItemRef.matches(paper, "vanilla.PAPER")).thenReturn(true);
+        return paper;
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void offHandHalfOfTheFinishingClickDoesNotStartANewProject(int ticksLater) {
+        ItemStack paper = finishableProjectWithStartItemInOffHand();
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        bukkit.when(Bukkit::getCurrentTick).thenReturn(ticksLater);
+        PlayerInteractEvent offHand = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND);
+        manager.onStationInteract(offHand);
+
+        assertTrue(project.isCompleted());
+        assertNull(manager.getStationAt(location));
+        assertTrue(offHand.isCancelled());
+        assertEquals(2, paper.getAmount());
+        inputs.verify(() -> InputMatcher.findByStartItem(any()), never());
+        verify(player, never()).sendMessage("station.started");
+        store.verify(() -> StationStore.saveStation(any()), never());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"later-tick", "other-lectern", "after-quit", "after-unload", "main-hand-same-tick"})
+    void startsStillWorkOutsideTheFinishingClick(String situation) {
+        ItemStack paper = finishableProjectWithStartItemInOffHand();
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        assertNull(manager.getStationAt(location));
+        Block target = lectern;
+        Location targetLocation = location;
+        EquipmentSlot hand = EquipmentSlot.OFF_HAND;
+        switch (situation) {
+            case "later-tick" -> bukkit.when(Bukkit::getCurrentTick).thenReturn(2);
+            case "main-hand-same-tick" -> {
+                when(bottom.getItemInMainHand()).thenReturn(paper);
+                hand = EquipmentSlot.HAND;
+            }
+            case "other-lectern" -> {
+                targetLocation = new Location(world, 30, 64, 20);
+                target = mock(Block.class);
+                when(target.getType()).thenReturn(Material.LECTERN);
+                when(target.getLocation()).thenReturn(targetLocation);
+            }
+            case "after-quit" -> manager.onPlayerQuit(new PlayerQuitEvent(player, (String) null));
+            default -> {
+                store.when(StationStore::loadAll).thenReturn(List.of());
+                manager.unloadAll();
+                manager.start();
+            }
+        }
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, target, hand));
+
+        ResearchStation started = manager.getStationAt(targetLocation);
+        assertNotNull(started);
+        assertEquals("input", started.getProject().getInputId());
+        assertEquals(1, paper.getAmount());
+        verify(player).sendMessage("station.started");
+    }
+
+    @Test
+    void withoutAFinishTheOffHandHalfOfAClickStillStartsResearch() {
+        noStations();
+        ItemStack paper = stack(Material.PAPER, 2);
+        ItemStack dirt = stack(Material.DIRT, 1);
+        when(bottom.getItemInMainHand()).thenReturn(dirt);
+        when(bottom.getItemInOffHand()).thenReturn(paper);
+        inputs.when(() -> InputMatcher.findByStartItem(paper)).thenReturn(input("vanilla.PAPER", 1, "output"));
+        items.when(() -> ItemRef.matches(paper, "vanilla.PAPER")).thenReturn(true);
+        output(Map.of("fire", 2));
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        verify(player).sendMessage("station.invalid_start_item");
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND));
+
+        assertNotNull(manager.getStationAt(location));
+        assertEquals(1, paper.getAmount());
+        verify(player).sendMessage("station.started");
     }
 
     private ItemStack prepareExperiment(String primary, String secondary, Map<String, Integer> recipe) {

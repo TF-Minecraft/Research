@@ -39,6 +39,11 @@ class ResearchTextAndModelTest {
         for (var style : GuiText.AspectNameStyle.values()) assertEquals("name",ChatColor.stripColor(GuiText.aspectName(style,"§aname")));
         assertEquals("",GuiText.aspectName(GuiText.AspectNameStyle.PLAIN,null));
     }
+    @Test void messagesMissingFromAnOlderMessagesFileUseTheirFallbackWithThePrefix() {
+        Messages.clear(); Messages.setPrefix("[Research] "); Messages.put("station.output_unavailable", "Configured");
+        assertEquals("[Research] Configured", Messages.getOrDefault("station.output_unavailable", "Fallback"));
+        assertEquals("[Research] Fallback", Messages.getOrDefault("station.absent", "Fallback"));
+    }
     @Test void completionEventPublishesStablePluginApi() {
         var player = org.mockito.Mockito.mock(org.bukkit.entity.Player.class);
         var event = new net.tfminecraft.research.event.ResearchCompleteEvent(player,"input","output","v.paper");

@@ -11,6 +11,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.configuration.ConfigurationSection;
 
+import net.tfminecraft.research.util.ResultRef;
+
 public final class OutputDef {
 
     private final String id;
@@ -156,15 +158,20 @@ public final class OutputDef {
     public static final class ResultSpec {
         private final String itemRef;
         private final String templateRef;
+        private final boolean templateInItemKey;
 
         public ResultSpec(ConfigurationSection config) {
-            if (config != null) {
-                this.itemRef = config.getString("item", "");
-                this.templateRef = config.getString("template", "");
-            } else {
-                this.itemRef = "";
-                this.templateRef = "";
-            }
+            String item = config != null ? config.getString("item", "") : "";
+            String template = config != null ? config.getString("template", "") : "";
+            // result.item: t.<id> is a template written under the wrong key; read it as result.template.
+            this.templateInItemKey = ResultRef.isTemplateRef(item) && (template == null || template.isBlank());
+            this.itemRef = templateInItemKey ? "" : item;
+            this.templateRef = templateInItemKey ? item : template;
+        }
+
+        /** True when the template was written as {@code result.item: t.<id>} instead of {@code result.template}. */
+        public boolean isTemplateInItemKey() {
+            return templateInItemKey;
         }
 
         public String getItemRef() {

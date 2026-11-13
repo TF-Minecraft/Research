@@ -33,6 +33,11 @@ public final class Messages {
         return format(key, Map.of());
     }
 
+    /** The message for a key that older messages.yml files may lack: the fallback, with the prefix, until it is added. */
+    public static String getOrDefault(String key, String fallback) {
+        return has(key) ? get(key) : StringFormatter.formatHex(prefix + fallback);
+    }
+
     public static String format(String key, Map<String, String> placeholders) {
         return StringFormatter.formatHex(prefix + formatBodyRaw(key, placeholders));
     }

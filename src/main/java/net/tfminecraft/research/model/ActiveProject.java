@@ -17,7 +17,7 @@ public final class ActiveProject {
 
     private final String inputId;
     private final String resolvedOutputId;
-    private final String resolvedResultRef;
+    private String resolvedResultRef;
     private boolean productRevealed;
     private boolean completed;
     private final Map<String, String> aspectStates = new HashMap<>();
@@ -53,6 +53,11 @@ public final class ActiveProject {
 
     public String getResolvedResultRef() {
         return resolvedResultRef;
+    }
+
+    /** Replaces a saved result that was still a template ref with the item it rolled. */
+    public void setResolvedResultRef(String resolvedResultRef) {
+        this.resolvedResultRef = resolvedResultRef;
     }
 
     /**

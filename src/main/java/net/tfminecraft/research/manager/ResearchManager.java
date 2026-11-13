@@ -1,6 +1,7 @@
 package net.tfminecraft.research.manager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +20,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -48,6 +50,7 @@ import net.tfminecraft.research.util.InputMatcher;
 import net.tfminecraft.research.util.ItemRef;
 import net.tfminecraft.research.util.OutputPicker;
 import net.tfminecraft.research.util.PlayerInventoryUtil;
+import net.tfminecraft.research.util.ResultRef;
 import net.tfminecraft.research.util.ResultResolver;
 import net.tfminecraft.research.util.ResultSpawnEffects;
 import net.tfminecraft.research.util.RevealHelper;
@@ -64,7 +67,18 @@ public final class ResearchManager implements Listener {
     private final PlayerManager playerManager;
     private final InventoryManager inventoryManager;
 
+    /** Fallback for station.output_unavailable until an older messages.yml gets the key. */
+    static final String OUTPUT_UNAVAILABLE =
+            "#c45749This research is not working right now. Please tell a staff member.";
+
     private final List<ResearchStation> stations = new ArrayList<>();
+    /**
+     * At most one entry per online player: the lectern and tick of their last main-hand reopen finish.
+     * An expired entry is removed on that player's next station click; all entries go on quit or unload.
+     */
+    private final Map<UUID, FinishedClick> finishedClicks = new HashMap<>();
+
+    private record FinishedClick(String lecternKey, int tick) {}
 
     public ResearchManager(PlayerManager playerManager) {
         this.playerManager = playerManager;
@@ -91,6 +105,7 @@ public final class ResearchManager implements Listener {
         }
         StationStore.saveAll(stations);
         stations.clear();
+        finishedClicks.clear();
     }
 
     /** Every loaded station, read-only. */
@@ -152,9 +167,15 @@ public final class ResearchManager implements Listener {
             return;
         }
 
+        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
+        if (isOffHandOfFinishingClick(player, hand, block)) {
+            // The main hand of this same click just finished a project here; don't start another from the off hand.
+            event.setCancelled(true);
+            return;
+        }
+
         Location stationLoc = block.getLocation();
         ResearchStation station = getStationAt(stationLoc);
-        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
         // A lectern with no project still places and opens written books.
         if (station == null && shouldLeaveLecternToVanilla(block, player, hand)) {
             return;
@@ -174,6 +195,9 @@ public final class ResearchManager implements Listener {
                 return;
             }
             openMainGui(player, station);
+            if (hand == EquipmentSlot.HAND) {
+                finishIfAlreadyComplete(player, station);
+            }
             return;
         }
 
@@ -555,12 +579,35 @@ public final class ResearchManager implements Listener {
                     + "' has no resolved result on active project.");
             return false;
         }
+        String savedRef = resultRef;
+        if (ResultRef.isTemplateRef(savedRef)) {
+            // Projects started from result.item: t.<id> saved the template itself; roll it now.
+            resultRef = ResultResolver.resolveToItemRef(savedRef);
+            if (resultRef == null) {
+                Research.plugin.getLogger().warning("[Research] Could not resolve saved result template '"
+                        + savedRef + "' for output '" + outputDef.getId() + "' at "
+                        + ResearchStation.locationKey(station.getLocation()));
+                return false;
+            }
+        }
 
         ItemStack reward = ItemRef.build(resultRef);
         if (reward == null) {
             Research.plugin.getLogger().warning("[Research] Could not build result item for output '"
-                    + outputDef.getId() + "': " + resultRef);
+                    + outputDef.getId() + "': " + resultRef
+                    + (resultRef.equals(savedRef) ? "" : " (rolled from saved template '" + savedRef + "', kept)"));
             return false;
+        }
+        if (!resultRef.equals(savedRef)) {
+            // Only a roll that builds replaces the saved template, so a bad roll cannot pin the station.
+            Research.plugin.getLogger().info("[Research] Resolved saved result template '" + savedRef + "' to '"
+                    + resultRef + "' for output '" + outputDef.getId() + "'.");
+            active.setResolvedResultRef(resultRef);
+            if (!StationStore.saveStation(station)) {
+                Research.plugin.getLogger().warning("[Research] Could not save the rolled result '" + resultRef
+                        + "' for station " + ResearchStation.locationKey(station.getLocation())
+                        + "; the reward is still given.");
+            }
         }
 
         Location stationLoc = blockLocation(station.getLocation());
@@ -646,15 +693,19 @@ public final class ResearchManager implements Listener {
         String outputId = OutputPicker.roll(input);
         OutputDef output = outputId != null ? OutputLoader.getById(outputId) : null;
         if (output == null || !output.isEnabled()) {
-            player.sendMessage(Messages.get("reload.failed"));
+            refuseStart(player, input, outputId, outputId == null ? "has no outputs"
+                    : "rolled output '" + outputId + "', which is " + (output == null ? "not loaded" : "disabled"));
+            return null;
+        }
+        if (!OutputLoader.passedChecks(output.getId())) {
+            refuseStart(player, input, outputId, "rolled output '" + output.getId()
+                    + "', which failed its load checks (see the errors from the last load); fix it and run /research reload");
             return null;
         }
 
         String resolvedResultRef = ResultResolver.resolve(output.getResult());
         if (resolvedResultRef == null) {
-            Research.plugin.getLogger().severe("[Research] Could not resolve result for output '" + output.getId()
-                    + "' at station start.");
-            player.sendMessage(Messages.get("reload.failed"));
+            refuseStart(player, input, outputId, "could not resolve the result of output '" + output.getId() + "'");
             return null;
         }
 
@@ -672,6 +723,22 @@ public final class ResearchManager implements Listener {
         StationStore.saveStation(station);
         StationStartEffects.play(player, blockLocation(location));
         return station;
+    }
+
+    /**
+     * A configuration problem stops the start before the research paper is taken. The console hears about
+     * each input and output pair once per load, not on every right-click.
+     */
+    private void refuseStart(Player player, InputDef input, String outputId, String problem) {
+        if (OutputLoader.firstRefusal(input.getId() + " -> " + outputId)) {
+            Research.plugin.getLogger().warning("[Research] " + player.getName() + " could not start research '"
+                    + input.getId() + "': it " + problem + ". Logged once until the next load.");
+        }
+        sendUnavailable(player);
+    }
+
+    private static void sendUnavailable(Player player) {
+        player.sendMessage(Messages.getOrDefault("station.output_unavailable", OUTPUT_UNAVAILABLE));
     }
 
     private boolean tryConsumeStartItemFromHand(Player player, EquipmentSlot hand, InputDef inputDef) {
@@ -707,6 +774,51 @@ public final class ResearchManager implements Listener {
 
     private void openMainGui(Player player, ResearchStation station) {
         inventoryManager.openMain(player, station);
+    }
+
+    /**
+     * A project whose recipe is already complete but whose reward could not be given (such as a saved
+     * {@code t.*} template result) finishes when its owner opens it again, without another experiment.
+     */
+    private void finishIfAlreadyComplete(Player player, ResearchStation station) {
+        ActiveProject project = station.getProject();
+        OutputDef outputDef = OutputLoader.getById(project.getResolvedOutputId());
+        InventoryView view = player.getOpenInventory();
+        // An output that failed its checks (an empty recipe among them) never finishes for free here.
+        if (outputDef == null || project.isCompleted() || !OutputLoader.passedChecks(outputDef.getId())
+                || outputDef.getRecipeAspects(project).isEmpty() || !isRecipeComplete(player, outputDef, project)
+                || !(view.getTopInventory().getHolder() instanceof StationMenuHolder holder)
+                || !holder.isCurrent(player) || !isMenuFor(view, station)) {
+            return;
+        }
+        if (checkProjectCompletion(player, station, outputDef, view.getTopInventory())) {
+            finishedClicks.put(player.getUniqueId(),
+                    new FinishedClick(ResearchStation.locationKey(station.getLocation()), Bukkit.getCurrentTick()));
+        } else {
+            sendUnavailable(player);
+        }
+    }
+
+    /**
+     * A real client sends a second, off-hand interact in the same tick when the main hand did nothing on its side.
+     * After a main-hand reopen finished a project, that off-hand half must not start a new project on the freed lectern.
+     */
+    private boolean isOffHandOfFinishingClick(Player player, EquipmentSlot hand, Block block) {
+        FinishedClick click = finishedClicks.get(player.getUniqueId());
+        if (click == null) {
+            return false;
+        }
+        // The two hand packets of one click can straddle a tick boundary, so the window is this tick and the next.
+        if (Bukkit.getCurrentTick() - click.tick() > 1) {
+            finishedClicks.remove(player.getUniqueId());
+            return false;
+        }
+        return hand == EquipmentSlot.OFF_HAND && click.lecternKey().equals(ResearchStation.locationKey(block.getLocation()));
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        finishedClicks.remove(event.getPlayer().getUniqueId());
     }
 
     /**
