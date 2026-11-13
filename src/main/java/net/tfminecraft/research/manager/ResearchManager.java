@@ -1,6 +1,7 @@
 package net.tfminecraft.research.manager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +20,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -70,6 +72,10 @@ public final class ResearchManager implements Listener {
             "#c45749This research is not working right now. Please tell a staff member.";
 
     private final List<ResearchStation> stations = new ArrayList<>();
+    /** At most one entry per online player: the lectern and tick of their last main-hand reopen finish. */
+    private final Map<UUID, FinishedClick> finishedClicks = new HashMap<>();
+
+    private record FinishedClick(String lecternKey, int tick) {}
 
     public ResearchManager(PlayerManager playerManager) {
         this.playerManager = playerManager;
@@ -96,6 +102,7 @@ public final class ResearchManager implements Listener {
         }
         StationStore.saveAll(stations);
         stations.clear();
+        finishedClicks.clear();
     }
 
     /** Every loaded station, read-only. */
@@ -157,9 +164,15 @@ public final class ResearchManager implements Listener {
             return;
         }
 
+        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
+        if (isOffHandOfFinishingClick(player, hand, block)) {
+            // The main hand of this same click just finished a project here; don't start another from the off hand.
+            event.setCancelled(true);
+            return;
+        }
+
         Location stationLoc = block.getLocation();
         ResearchStation station = getStationAt(stationLoc);
-        EquipmentSlot hand = event.getHand() != null ? event.getHand() : EquipmentSlot.HAND;
         // A lectern with no project still places and opens written books.
         if (station == null && shouldLeaveLecternToVanilla(block, player, hand)) {
             return;
@@ -775,9 +788,33 @@ public final class ResearchManager implements Listener {
                 || !holder.isCurrent(player) || !isMenuFor(view, station)) {
             return;
         }
-        if (!checkProjectCompletion(player, station, outputDef, view.getTopInventory())) {
+        if (checkProjectCompletion(player, station, outputDef, view.getTopInventory())) {
+            finishedClicks.put(player.getUniqueId(),
+                    new FinishedClick(ResearchStation.locationKey(station.getLocation()), Bukkit.getCurrentTick()));
+        } else {
             sendUnavailable(player);
         }
+    }
+
+    /**
+     * A real client sends a second, off-hand interact in the same tick when the main hand did nothing on its side.
+     * After a main-hand reopen finished a project, that off-hand half must not start a new project on the freed lectern.
+     */
+    private boolean isOffHandOfFinishingClick(Player player, EquipmentSlot hand, Block block) {
+        FinishedClick click = finishedClicks.get(player.getUniqueId());
+        if (click == null) {
+            return false;
+        }
+        if (click.tick() != Bukkit.getCurrentTick()) {
+            finishedClicks.remove(player.getUniqueId());
+            return false;
+        }
+        return hand == EquipmentSlot.OFF_HAND && click.lecternKey().equals(ResearchStation.locationKey(block.getLocation()));
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        finishedClicks.remove(event.getPlayer().getUniqueId());
     }
 
     /**

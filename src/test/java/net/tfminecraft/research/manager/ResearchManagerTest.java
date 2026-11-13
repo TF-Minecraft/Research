@@ -37,6 +37,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -1453,6 +1454,91 @@ class ResearchManagerTest {
 
         verify(logger, times(2)).warning(contains("failed its load checks"));
         assertEquals(1, held.getAmount());
+    }
+
+    /** Seeds a complete project whose reward builds, so a main-hand reopen finishes it. */
+    private ItemStack finishableProjectWithStartItemInOffHand() {
+        output(Map.of("fire", 2));
+        project.setAspectState("fire", AspectState.CONFIRMED);
+        project.addAspectPoints("fire", 2, 2);
+        ItemStack reward = stack(Material.DIAMOND, 1);
+        items.when(() -> ItemRef.build("vanilla.DIAMOND")).thenReturn(reward);
+        rewards.when(() -> ResultSpawnEffects.spawnAtStation(location, reward)).thenReturn(true);
+        ItemStack paper = stack(Material.PAPER, 2);
+        when(bottom.getItemInOffHand()).thenReturn(paper);
+        inputs.when(() -> InputMatcher.findByStartItem(paper)).thenReturn(input("vanilla.PAPER", 1, "output"));
+        items.when(() -> ItemRef.matches(paper, "vanilla.PAPER")).thenReturn(true);
+        return paper;
+    }
+
+    @Test
+    void offHandHalfOfTheFinishingClickDoesNotStartANewProject() {
+        ItemStack paper = finishableProjectWithStartItemInOffHand();
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        PlayerInteractEvent offHand = interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND);
+        manager.onStationInteract(offHand);
+
+        assertTrue(project.isCompleted());
+        assertNull(manager.getStationAt(location));
+        assertTrue(offHand.isCancelled());
+        assertEquals(2, paper.getAmount());
+        inputs.verify(() -> InputMatcher.findByStartItem(any()), never());
+        verify(player, never()).sendMessage("station.started");
+        store.verify(() -> StationStore.saveStation(any()), never());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"later-tick", "other-lectern", "after-quit", "after-unload"})
+    void offHandStartsStillWorkOnOtherTicksAndLecterns(String situation) {
+        ItemStack paper = finishableProjectWithStartItemInOffHand();
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        assertNull(manager.getStationAt(location));
+        Block target = lectern;
+        Location targetLocation = location;
+        switch (situation) {
+            case "later-tick" -> bukkit.when(Bukkit::getCurrentTick).thenReturn(1);
+            case "other-lectern" -> {
+                targetLocation = new Location(world, 30, 64, 20);
+                target = mock(Block.class);
+                when(target.getType()).thenReturn(Material.LECTERN);
+                when(target.getLocation()).thenReturn(targetLocation);
+            }
+            case "after-quit" -> manager.onPlayerQuit(new PlayerQuitEvent(player, (String) null));
+            default -> {
+                store.when(StationStore::loadAll).thenReturn(List.of());
+                manager.unloadAll();
+                manager.start();
+            }
+        }
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, target, EquipmentSlot.OFF_HAND));
+
+        ResearchStation started = manager.getStationAt(targetLocation);
+        assertNotNull(started);
+        assertEquals("input", started.getProject().getInputId());
+        assertEquals(1, paper.getAmount());
+        verify(player).sendMessage("station.started");
+    }
+
+    @Test
+    void withoutAFinishTheOffHandHalfOfAClickStillStartsResearch() {
+        noStations();
+        ItemStack paper = stack(Material.PAPER, 2);
+        ItemStack dirt = stack(Material.DIRT, 1);
+        when(bottom.getItemInMainHand()).thenReturn(dirt);
+        when(bottom.getItemInOffHand()).thenReturn(paper);
+        inputs.when(() -> InputMatcher.findByStartItem(paper)).thenReturn(input("vanilla.PAPER", 1, "output"));
+        items.when(() -> ItemRef.matches(paper, "vanilla.PAPER")).thenReturn(true);
+        output(Map.of("fire", 2));
+
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
+        verify(player).sendMessage("station.invalid_start_item");
+        manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.OFF_HAND));
+
+        assertNotNull(manager.getStationAt(location));
+        assertEquals(1, paper.getAmount());
+        verify(player).sendMessage("station.started");
     }
 
     private ItemStack prepareExperiment(String primary, String secondary, Map<String, Integer> recipe) {
