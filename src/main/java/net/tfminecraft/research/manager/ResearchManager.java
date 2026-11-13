@@ -48,6 +48,7 @@ import net.tfminecraft.research.util.InputMatcher;
 import net.tfminecraft.research.util.ItemRef;
 import net.tfminecraft.research.util.OutputPicker;
 import net.tfminecraft.research.util.PlayerInventoryUtil;
+import net.tfminecraft.research.util.ResultRef;
 import net.tfminecraft.research.util.ResultResolver;
 import net.tfminecraft.research.util.ResultSpawnEffects;
 import net.tfminecraft.research.util.RevealHelper;
@@ -174,6 +175,7 @@ public final class ResearchManager implements Listener {
                 return;
             }
             openMainGui(player, station);
+            finishIfAlreadyComplete(player, station);
             return;
         }
 
@@ -555,6 +557,21 @@ public final class ResearchManager implements Listener {
                     + "' has no resolved result on active project.");
             return false;
         }
+        if (ResultRef.isTemplateRef(resultRef)) {
+            // Projects started from result.item: t.<id> saved the template itself; roll it now.
+            String rolled = ResultResolver.resolveToItemRef(resultRef);
+            if (rolled == null) {
+                Research.plugin.getLogger().warning("[Research] Could not resolve saved result template '"
+                        + resultRef + "' for output '" + outputDef.getId() + "' at "
+                        + ResearchStation.locationKey(station.getLocation()));
+                return false;
+            }
+            Research.plugin.getLogger().info("[Research] Resolved saved result template '" + resultRef + "' to '"
+                    + rolled + "' for output '" + outputDef.getId() + "'.");
+            active.setResolvedResultRef(rolled);
+            StationStore.saveStation(station);
+            resultRef = rolled;
+        }
 
         ItemStack reward = ItemRef.build(resultRef);
         if (reward == null) {
@@ -646,7 +663,13 @@ public final class ResearchManager implements Listener {
         String outputId = OutputPicker.roll(input);
         OutputDef output = outputId != null ? OutputLoader.getById(outputId) : null;
         if (output == null || !output.isEnabled()) {
-            player.sendMessage(Messages.get("reload.failed"));
+            refuseStart(player, input, outputId == null ? "has no outputs"
+                    : "rolled output '" + outputId + "', which is " + (output == null ? "not loaded" : "disabled"));
+            return null;
+        }
+        if (!OutputLoader.passedChecks(output.getId())) {
+            refuseStart(player, input, "rolled output '" + output.getId()
+                    + "', which failed its load checks (see the errors from the last load); fix it and run /research reload");
             return null;
         }
 
@@ -654,7 +677,7 @@ public final class ResearchManager implements Listener {
         if (resolvedResultRef == null) {
             Research.plugin.getLogger().severe("[Research] Could not resolve result for output '" + output.getId()
                     + "' at station start.");
-            player.sendMessage(Messages.get("reload.failed"));
+            refuseStart(player, input, "could not resolve the result of output '" + output.getId() + "'");
             return null;
         }
 
@@ -672,6 +695,14 @@ public final class ResearchManager implements Listener {
         StationStore.saveStation(station);
         StationStartEffects.play(player, blockLocation(location));
         return station;
+    }
+
+    /** A configuration problem stops the start before the research paper is taken. */
+    private void refuseStart(Player player, InputDef input, String problem) {
+        Research.plugin.getLogger().warning("[Research] " + player.getName() + " could not start research '"
+                + input.getId() + "': it " + problem + ".");
+        player.sendMessage(Messages.getOrDefault("station.output_unavailable",
+                "#c45749This research cannot be started right now. Please tell a staff member."));
     }
 
     private boolean tryConsumeStartItemFromHand(Player player, EquipmentSlot hand, InputDef inputDef) {
@@ -707,6 +738,21 @@ public final class ResearchManager implements Listener {
 
     private void openMainGui(Player player, ResearchStation station) {
         inventoryManager.openMain(player, station);
+    }
+
+    /**
+     * A project whose recipe is already complete but whose reward could not be given (such as a saved
+     * {@code t.*} template result) finishes when its owner opens it again, without another experiment.
+     */
+    private void finishIfAlreadyComplete(Player player, ResearchStation station) {
+        OutputDef outputDef = OutputLoader.getById(station.getProject().getResolvedOutputId());
+        InventoryView view = player.getOpenInventory();
+        if (outputDef == null || station.getProject().isCompleted()
+                || !(view.getTopInventory().getHolder() instanceof StationMenuHolder holder)
+                || !holder.isCurrent(player) || !isMenuFor(view, station)) {
+            return;
+        }
+        checkProjectCompletion(player, station, outputDef, view.getTopInventory());
     }
 
     /**

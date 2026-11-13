@@ -223,6 +223,50 @@ class ResearchLoadersTest {
     }
 
     @Test
+    void templateWrittenAsResultItemLoadsAsATemplateWithAWarning() throws Exception {
+        TemplateLoader.get().put("loot", new ResultTemplateDef("loot", List.of(new ResultTemplateDef.WeightedOutput("v.paper", 1))));
+        File file = yaml("alias-outputs/a.yml", """
+                alias:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  result: {item: " t.loot "}
+                alias-and-template:
+                  mystery_display: {item: v.paper}
+                  product_display: {item: v.paper}
+                  result: {item: t.loot, template: t.loot}
+                """);
+
+        assertFalse(new OutputLoader().loadFolder(file.getParentFile()));
+
+        OutputDef.ResultSpec alias = OutputLoader.getById("alias").getResult();
+        assertTrue(alias.isTemplateInItemKey());
+        assertTrue(alias.hasTemplate());
+        assertFalse(alias.hasItem());
+        assertTrue(OutputLoader.passedChecks("alias"));
+        verify(logger).warning(contains("Output 'alias' sets result.item: t.loot, which is a template."
+                + " It is read as result.template; write it as result.template in a.yml"));
+        OutputDef.ResultSpec both = OutputLoader.getById("alias-and-template").getResult();
+        assertFalse(both.isTemplateInItemKey());
+        assertTrue(both.hasItem() && both.hasTemplate());
+        assertFalse(OutputLoader.passedChecks("alias-and-template"));
+        assertEquals(java.util.Set.of("alias-and-template"), OutputLoader.failedChecks());
+    }
+
+    @Test
+    void outputsThatFailTheirChecksAreListedUntilTheNextLoad() throws Exception {
+        File bad = yaml("checked-bad/a.yml", "broken: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: t.missing}}\n");
+        assertFalse(new OutputLoader().loadFolder(bad.getParentFile()));
+        assertNotNull(OutputLoader.getById("broken"));
+        assertFalse(OutputLoader.passedChecks("broken"));
+        verify(logger).severe(contains("Output 'broken' references unknown template 'missing'"));
+
+        File good = yaml("checked-good/a.yml", "broken: {mystery_display: {item: v.paper}, product_display: {item: v.paper}, result: {item: v.paper}}\n");
+        assertTrue(new OutputLoader().loadFolder(good.getParentFile()));
+        assertTrue(OutputLoader.passedChecks("broken"));
+        assertTrue(OutputLoader.failedChecks().isEmpty());
+    }
+
+    @Test
     void outputAspectPoolsLoadAndValidatePickSizeOverlapAndRows() throws Exception {
         for (String id : List.of("fire", "water", "earth", "air")) AspectLoader.get().put(id, new AspectDef(id, config("{}")));
         File good = yaml("pool-good/a.yml", """

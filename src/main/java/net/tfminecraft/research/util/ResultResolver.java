@@ -25,7 +25,11 @@ public final class ResultResolver {
         return null;
     }
 
-    private static String resolveToItemRef(String ref) {
+    /**
+     * Rolls a saved or configured result down to an item ref: a {@code t.*} template is rolled (nested
+     * templates too), an item ref is returned as it is, and anything else gives null.
+     */
+    public static String resolveToItemRef(String ref) {
         if (ref == null || ref.isBlank()) {
             return null;
         }

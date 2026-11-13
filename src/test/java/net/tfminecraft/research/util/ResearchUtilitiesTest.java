@@ -362,6 +362,21 @@ class ResearchUtilitiesTest {
     }
 
     @Test
+    void templateWrittenAsResultItemResolvesLikeAResultTemplate() {
+        TemplateLoader.get().put("loot", new ResultTemplateDef("loot", List.of(
+                new ResultTemplateDef.WeightedOutput("vanilla.EMERALD", 1))));
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("item", "t.loot");
+        OutputDef.ResultSpec spec = new OutputDef.ResultSpec(config);
+        assertTrue(spec.isTemplateInItemKey());
+        assertEquals("vanilla.EMERALD", ResultResolver.resolve(spec));
+        assertEquals("vanilla.EMERALD", ResultResolver.resolveToItemRef("t.loot"));
+        assertEquals("vanilla.PAPER", ResultResolver.resolveToItemRef("vanilla.PAPER"));
+        assertNull(ResultResolver.resolveToItemRef("t.absent"));
+        assertNull(ResultResolver.resolveToItemRef("not-an-item"));
+    }
+
+    @Test
     void controlOnlyDirectResultsAreRejectedAfterTrimming() throws Exception {
         YamlConfiguration config = new YamlConfiguration();
         config.loadFromString("item: \"\\0\"\n");

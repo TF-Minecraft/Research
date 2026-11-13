@@ -6,7 +6,9 @@ import net.tfminecraft.research.registry.AspectItemRegistry;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Restores process-wide configuration and registries after an isolated test. */
 public final class ResearchTestState implements AutoCloseable {
@@ -21,6 +23,7 @@ public final class ResearchTestState implements AutoCloseable {
                 Object value = field.get(null);
                 if (Modifier.isFinal(field.getModifiers())) {
                     if (value instanceof Map<?, ?> map) values.put(field, new LinkedHashMap<>(map));
+                    else if (value instanceof Set<?> set) values.put(field, new LinkedHashSet<>(set));
                 } else {
                     values.put(field, value);
                 }
@@ -32,7 +35,11 @@ public final class ResearchTestState implements AutoCloseable {
     @SuppressWarnings("unchecked")
     public void close() throws IllegalAccessException {
         for (var saved : values.entrySet()) {
-            if (Modifier.isFinal(saved.getKey().getModifiers())) {
+            if (saved.getValue() instanceof Set<?> set && Modifier.isFinal(saved.getKey().getModifiers())) {
+                Set<Object> live = (Set<Object>) saved.getKey().get(null);
+                live.clear();
+                live.addAll(set);
+            } else if (Modifier.isFinal(saved.getKey().getModifiers())) {
                 Map<Object, Object> map = (Map<Object, Object>) saved.getKey().get(null);
                 map.clear();
                 map.putAll((Map<Object, Object>) saved.getValue());

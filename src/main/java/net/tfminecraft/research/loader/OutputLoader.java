@@ -4,9 +4,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -24,9 +26,19 @@ import net.tfminecraft.research.util.YamlFolder;
 public final class OutputLoader implements LoaderInterface {
 
     private static final Map<String, OutputDef> map = new LinkedHashMap<>();
+    private static final Set<String> failedChecks = new HashSet<>();
 
     public static Map<String, OutputDef> get() {
         return map;
+    }
+
+    /** Ids of loaded outputs that failed a load check. They stay listed, but no project can start them. */
+    public static Set<String> failedChecks() {
+        return failedChecks;
+    }
+
+    public static boolean passedChecks(String id) {
+        return !failedChecks.contains(id);
     }
 
     public static OutputDef getById(String id) {
@@ -40,6 +52,7 @@ public final class OutputLoader implements LoaderInterface {
 
     public boolean loadFolder(File folder) {
         map.clear();
+        failedChecks.clear();
         boolean ok = true;
         List<File> files = new ArrayList<>(YamlFolder.listYamlFiles(folder));
         files.sort(Comparator.comparing(file -> file.getName().toLowerCase()));
@@ -77,7 +90,10 @@ public final class OutputLoader implements LoaderInterface {
             }
 
             OutputDef def = new OutputDef(key, section);
-            ok &= validate(def, configFile);
+            if (!validate(def, configFile)) {
+                failedChecks.add(key);
+                ok = false;
+            }
             map.put(key, def);
         }
         return ok;
@@ -161,6 +177,11 @@ public final class OutputLoader implements LoaderInterface {
             Research.plugin.getLogger().severe("[Research] Output '" + def.getId()
                     + "' missing result.item or result.template in " + configFile.getName());
             return false;
+        }
+        if (result.isTemplateInItemKey()) {
+            Research.plugin.getLogger().warning("[Research] Output '" + def.getId() + "' sets result.item: "
+                    + result.getTemplateRef().trim() + ", which is a template. It is read as result.template;"
+                    + " write it as result.template in " + configFile.getName());
         }
         if (result.hasTemplate()) {
             String templateId = ResultRef.templateId(result.getTemplateRef());
