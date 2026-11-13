@@ -28,6 +28,7 @@ public final class OutputLoader implements LoaderInterface {
 
     private static final Map<String, OutputDef> map = new LinkedHashMap<>();
     private static final Set<String> failedChecks = new HashSet<>();
+    // ResearchManager's refused-start log state (see firstRefusal): main thread only, reset on each load.
     private static final Set<String> refusalsLogged = new HashSet<>();
 
     public static Map<String, OutputDef> get() {
@@ -43,7 +44,10 @@ public final class OutputLoader implements LoaderInterface {
         return !failedChecks.contains(id);
     }
 
-    /** True the first time a refused start is reported for this key since the last load, so the console is not flooded. */
+    /**
+     * True the first time a refused start is reported for this key since the last load, so the console is not
+     * flooded. Holds ResearchManager's refusal-log state; main thread only; reset on each load.
+     */
     public static boolean firstRefusal(String key) {
         return refusalsLogged.add(key);
     }

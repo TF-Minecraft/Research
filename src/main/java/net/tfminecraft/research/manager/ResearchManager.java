@@ -590,7 +590,7 @@ public final class ResearchManager implements Listener {
             if (!StationStore.saveStation(station)) {
                 Research.plugin.getLogger().warning("[Research] Could not save the rolled result '" + resultRef
                         + "' for station " + ResearchStation.locationKey(station.getLocation())
-                        + "; it is kept in memory for the next save.");
+                        + "; the reward is still given.");
             }
         }
 

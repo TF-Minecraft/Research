@@ -1426,7 +1426,7 @@ class ResearchManagerTest {
         confirm();
 
         verify(logger).warning(contains("Could not save the rolled result 'm.loot.rune' for station "
-                + ResearchStation.locationKey(location) + "; it is kept in memory for the next save."));
+                + ResearchStation.locationKey(location) + "; the reward is still given."));
         assertTrue(project.isCompleted());
         assertNull(manager.getStationAt(location));
         store.verify(() -> StationStore.deleteStation(location));
