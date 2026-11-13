@@ -65,6 +65,10 @@ public final class ResearchManager implements Listener {
     private final PlayerManager playerManager;
     private final InventoryManager inventoryManager;
 
+    /** Fallback for station.output_unavailable until an older messages.yml gets the key. */
+    static final String OUTPUT_UNAVAILABLE =
+            "#c45749This research is not working right now. Please tell a staff member.";
+
     private final List<ResearchStation> stations = new ArrayList<>();
 
     public ResearchManager(PlayerManager playerManager) {
@@ -175,7 +179,9 @@ public final class ResearchManager implements Listener {
                 return;
             }
             openMainGui(player, station);
-            finishIfAlreadyComplete(player, station);
+            if (hand == EquipmentSlot.HAND) {
+                finishIfAlreadyComplete(player, station);
+            }
             return;
         }
 
@@ -557,27 +563,35 @@ public final class ResearchManager implements Listener {
                     + "' has no resolved result on active project.");
             return false;
         }
-        if (ResultRef.isTemplateRef(resultRef)) {
+        String savedRef = resultRef;
+        if (ResultRef.isTemplateRef(savedRef)) {
             // Projects started from result.item: t.<id> saved the template itself; roll it now.
-            String rolled = ResultResolver.resolveToItemRef(resultRef);
-            if (rolled == null) {
+            resultRef = ResultResolver.resolveToItemRef(savedRef);
+            if (resultRef == null) {
                 Research.plugin.getLogger().warning("[Research] Could not resolve saved result template '"
-                        + resultRef + "' for output '" + outputDef.getId() + "' at "
+                        + savedRef + "' for output '" + outputDef.getId() + "' at "
                         + ResearchStation.locationKey(station.getLocation()));
                 return false;
             }
-            Research.plugin.getLogger().info("[Research] Resolved saved result template '" + resultRef + "' to '"
-                    + rolled + "' for output '" + outputDef.getId() + "'.");
-            active.setResolvedResultRef(rolled);
-            StationStore.saveStation(station);
-            resultRef = rolled;
         }
 
         ItemStack reward = ItemRef.build(resultRef);
         if (reward == null) {
             Research.plugin.getLogger().warning("[Research] Could not build result item for output '"
-                    + outputDef.getId() + "': " + resultRef);
+                    + outputDef.getId() + "': " + resultRef
+                    + (resultRef.equals(savedRef) ? "" : " (rolled from saved template '" + savedRef + "', kept)"));
             return false;
+        }
+        if (!resultRef.equals(savedRef)) {
+            // Only a roll that builds replaces the saved template, so a bad roll cannot pin the station.
+            Research.plugin.getLogger().info("[Research] Resolved saved result template '" + savedRef + "' to '"
+                    + resultRef + "' for output '" + outputDef.getId() + "'.");
+            active.setResolvedResultRef(resultRef);
+            if (!StationStore.saveStation(station)) {
+                Research.plugin.getLogger().warning("[Research] Could not save the rolled result '" + resultRef
+                        + "' for station " + ResearchStation.locationKey(station.getLocation())
+                        + "; it is kept in memory for the next save.");
+            }
         }
 
         Location stationLoc = blockLocation(station.getLocation());
@@ -663,21 +677,19 @@ public final class ResearchManager implements Listener {
         String outputId = OutputPicker.roll(input);
         OutputDef output = outputId != null ? OutputLoader.getById(outputId) : null;
         if (output == null || !output.isEnabled()) {
-            refuseStart(player, input, outputId == null ? "has no outputs"
+            refuseStart(player, input, outputId, outputId == null ? "has no outputs"
                     : "rolled output '" + outputId + "', which is " + (output == null ? "not loaded" : "disabled"));
             return null;
         }
         if (!OutputLoader.passedChecks(output.getId())) {
-            refuseStart(player, input, "rolled output '" + output.getId()
+            refuseStart(player, input, outputId, "rolled output '" + output.getId()
                     + "', which failed its load checks (see the errors from the last load); fix it and run /research reload");
             return null;
         }
 
         String resolvedResultRef = ResultResolver.resolve(output.getResult());
         if (resolvedResultRef == null) {
-            Research.plugin.getLogger().severe("[Research] Could not resolve result for output '" + output.getId()
-                    + "' at station start.");
-            refuseStart(player, input, "could not resolve the result of output '" + output.getId() + "'");
+            refuseStart(player, input, outputId, "could not resolve the result of output '" + output.getId() + "'");
             return null;
         }
 
@@ -697,12 +709,20 @@ public final class ResearchManager implements Listener {
         return station;
     }
 
-    /** A configuration problem stops the start before the research paper is taken. */
-    private void refuseStart(Player player, InputDef input, String problem) {
-        Research.plugin.getLogger().warning("[Research] " + player.getName() + " could not start research '"
-                + input.getId() + "': it " + problem + ".");
-        player.sendMessage(Messages.getOrDefault("station.output_unavailable",
-                "#c45749This research cannot be started right now. Please tell a staff member."));
+    /**
+     * A configuration problem stops the start before the research paper is taken. The console hears about
+     * each input and output pair once per load, not on every right-click.
+     */
+    private void refuseStart(Player player, InputDef input, String outputId, String problem) {
+        if (OutputLoader.firstRefusal(input.getId() + " -> " + outputId)) {
+            Research.plugin.getLogger().warning("[Research] " + player.getName() + " could not start research '"
+                    + input.getId() + "': it " + problem + ". Logged once until the next load.");
+        }
+        sendUnavailable(player);
+    }
+
+    private static void sendUnavailable(Player player) {
+        player.sendMessage(Messages.getOrDefault("station.output_unavailable", OUTPUT_UNAVAILABLE));
     }
 
     private boolean tryConsumeStartItemFromHand(Player player, EquipmentSlot hand, InputDef inputDef) {
@@ -745,14 +765,19 @@ public final class ResearchManager implements Listener {
      * {@code t.*} template result) finishes when its owner opens it again, without another experiment.
      */
     private void finishIfAlreadyComplete(Player player, ResearchStation station) {
-        OutputDef outputDef = OutputLoader.getById(station.getProject().getResolvedOutputId());
+        ActiveProject project = station.getProject();
+        OutputDef outputDef = OutputLoader.getById(project.getResolvedOutputId());
         InventoryView view = player.getOpenInventory();
-        if (outputDef == null || station.getProject().isCompleted()
+        // An output that failed its checks (an empty recipe among them) never finishes for free here.
+        if (outputDef == null || project.isCompleted() || !OutputLoader.passedChecks(outputDef.getId())
+                || outputDef.getRecipeAspects(project).isEmpty() || !isRecipeComplete(player, outputDef, project)
                 || !(view.getTopInventory().getHolder() instanceof StationMenuHolder holder)
                 || !holder.isCurrent(player) || !isMenuFor(view, station)) {
             return;
         }
-        checkProjectCompletion(player, station, outputDef, view.getTopInventory());
+        if (!checkProjectCompletion(player, station, outputDef, view.getTopInventory())) {
+            sendUnavailable(player);
+        }
     }
 
     /**

@@ -3,6 +3,7 @@ package net.tfminecraft.research.loader;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -27,6 +28,7 @@ public final class OutputLoader implements LoaderInterface {
 
     private static final Map<String, OutputDef> map = new LinkedHashMap<>();
     private static final Set<String> failedChecks = new HashSet<>();
+    private static final Set<String> refusalsLogged = new HashSet<>();
 
     public static Map<String, OutputDef> get() {
         return map;
@@ -34,11 +36,27 @@ public final class OutputLoader implements LoaderInterface {
 
     /** Ids of loaded outputs that failed a load check. They stay listed, but no project can start them. */
     public static Set<String> failedChecks() {
-        return failedChecks;
+        return Collections.unmodifiableSet(failedChecks);
     }
 
     public static boolean passedChecks(String id) {
         return !failedChecks.contains(id);
+    }
+
+    /** True the first time a refused start is reported for this key since the last load, so the console is not flooded. */
+    public static boolean firstRefusal(String key) {
+        return refusalsLogged.add(key);
+    }
+
+    /** Test hook: marks an output as failed without loading a file. */
+    static void markFailed(String id) {
+        failedChecks.add(id);
+    }
+
+    /** Test hook: forgets failed outputs and logged refusals, as a load does. */
+    static void resetChecks() {
+        failedChecks.clear();
+        refusalsLogged.clear();
     }
 
     public static OutputDef getById(String id) {
@@ -52,7 +70,7 @@ public final class OutputLoader implements LoaderInterface {
 
     public boolean loadFolder(File folder) {
         map.clear();
-        failedChecks.clear();
+        resetChecks();
         boolean ok = true;
         List<File> files = new ArrayList<>(YamlFolder.listYamlFiles(folder));
         files.sort(Comparator.comparing(file -> file.getName().toLowerCase()));
@@ -109,6 +127,12 @@ public final class OutputLoader implements LoaderInterface {
             Research.plugin.getLogger().severe("[Research] Output '" + def.getId() + "' has "
                     + recipeSize + " aspects but the station GUI supports "
                     + GridLayout.ASPECT_ROW_COUNT + " in " + configFile.getName());
+            ok = false;
+        }
+        if (recipeSize <= 0) {
+            // A recipe with nothing to research would be complete the moment it starts.
+            Research.plugin.getLogger().severe("[Research] Output '" + def.getId()
+                    + "' lists no aspects and no aspect_pool.pick in " + configFile.getName());
             ok = false;
         }
 
