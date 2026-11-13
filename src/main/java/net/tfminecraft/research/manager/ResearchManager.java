@@ -74,7 +74,7 @@ public final class ResearchManager implements Listener {
     private final List<ResearchStation> stations = new ArrayList<>();
     /**
      * At most one entry per online player: the lectern and tick of their last main-hand reopen finish.
-     * Expires after its tick window; removed on the next station click, quit or unload.
+     * An expired entry is removed on that player's next station click; all entries go on quit or unload.
      */
     private final Map<UUID, FinishedClick> finishedClicks = new HashMap<>();
 

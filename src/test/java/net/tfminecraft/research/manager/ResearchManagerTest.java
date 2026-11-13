@@ -1492,7 +1492,7 @@ class ResearchManagerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"later-tick", "other-lectern", "after-quit", "after-unload", "main-hand-same-tick"})
-    void offHandStartsStillWorkOnOtherTicksAndLecterns(String situation) {
+    void startsStillWorkOutsideTheFinishingClick(String situation) {
         ItemStack paper = finishableProjectWithStartItemInOffHand();
         manager.onStationInteract(interact(Action.RIGHT_CLICK_BLOCK, lectern, EquipmentSlot.HAND));
         assertNull(manager.getStationAt(location));
